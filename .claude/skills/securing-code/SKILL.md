@@ -30,7 +30,64 @@ Always follow this sequence in every server-side handler:
 
 ## Supply Chain
 
-- Pin exact versions — no `^` or `~` in production deps
-- Review `postinstall` scripts before adding any new dependency
-- Watch for supply chain patterns: account takeovers, phantom dependencies,
-  malicious postinstall hooks
+Pin versions, block scripts, enforce soak periods. These are enforceable
+guards, not advice — configure them in the project.
+
+### Node.js (.npmrc)
+
+```ini
+# Block postinstall scripts by default (would have stopped the Axios attack)
+ignore-scripts=true
+
+# 7-day soak period — don't install packages published in the last week
+minimum-release-age=10080
+
+# Pin exact versions — no ^ or ~
+save-exact=true
+
+# Enforce peer deps and run audit on every install
+strict-peer-dependencies=true
+audit=true
+```
+
+After adding `ignore-scripts=true`, explicitly allow trusted scripts:
+```bash
+pnpm config set allow-scripts "esbuild,sharp,prisma"
+```
+
+### Python (pip)
+
+```bash
+# Pin with hashes for integrity verification
+pip install --require-hashes -r requirements.txt
+
+# Generate pinned requirements with hashes
+pip-compile --generate-hashes requirements.in
+```
+
+### Go
+
+```bash
+# Verify module checksums against public transparency log
+GONOSUMCHECK= GOFLAGS=-mod=readonly go build ./...
+```
+
+### Rust
+
+```toml
+# Cargo.toml — use exact versions
+[dependencies]
+serde = "=1.0.210"
+```
+
+```bash
+# Audit for known vulnerabilities
+cargo audit
+```
+
+### When adding ANY new dependency
+
+1. Check: maintainer count, download volume, last publish date
+2. Review: `postinstall` / build scripts in the package
+3. Verify: no phantom transitive dependencies added
+4. Wait: prefer packages with 7+ days since last publish
