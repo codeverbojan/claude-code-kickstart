@@ -22,7 +22,7 @@ bash <(curl -fsSL https://raw.githubusercontent.com/codeverbojan/claude-code-kic
 
 The installer auto-detects your stack from project files (`package.json`, `go.mod`, `Cargo.toml`, `pyproject.toml`), reads your actual commands from `package.json` scripts or `Makefile` targets, and offers framework-specific starter configs (Next.js, FastAPI, Go API, Rust CLI). You confirm and optionally add conventions — that's it.
 
-**Update existing install** (preserves your CLAUDE.md, primer.md, gotchas.md, settings.json):
+**Update existing install** (preserves your CLAUDE.md, primer.md, gotchas.md, patterns.md, decisions.md, settings.json):
 
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/codeverbojan/claude-code-kickstart/main/install.sh) --update
@@ -41,10 +41,10 @@ Never overwrites existing files on fresh install. Safe on any project.
 ## Architecture: 4 Layers
 
 ```
-Layer 1 — CLAUDE.md          Strict operating rules. Always loaded. ~140 lines.
+Layer 1 — CLAUDE.md          Strict operating rules. Always loaded.
 Layer 2 — Commands + Agents   Task playbooks + specialized sub-agents.
 Layer 3 — Skills + Cheatsheet Domain knowledge + reference index.
-Layer 4 — primer.md + gotchas Session memory. Auto-loaded via hook.
+Layer 4 — Memory files        primer, gotchas, patterns, decisions. Auto-loaded via hook.
 ```
 
 Claude only loads what it needs. Small fixes don't pay the cost of full onboarding.
@@ -54,7 +54,7 @@ Claude only loads what it needs. Small fixes don't pay the cost of full onboardi
 ### 1. Run the installer
 
 Auto-detects your stack and offers a matching starter config.
-To fine-tune later, run `/init` inside Claude Code or edit `CLAUDE.md` Section 10.
+To fine-tune later, run `/init` or `/learn` inside Claude Code, or edit `CLAUDE.md` Section 10.
 
 ### 2. Start Claude
 
@@ -62,7 +62,7 @@ To fine-tune later, run `/init` inside Claude Code or edit `CLAUDE.md` Section 1
 claude
 ```
 
-Session hook auto-loads `primer.md` + `gotchas.md`.
+Session hook auto-loads `primer.md`, `gotchas.md`, `patterns.md`, `decisions.md`, and shows git commits since the last session.
 
 ### 3. Pick a workflow
 
@@ -70,6 +70,7 @@ Session hook auto-loads `primer.md` + `gotchas.md`.
 /onboard              # status check — report and wait
 /onboard deep         # full context load for major work
 /init                 # auto-analyze codebase, generate project config
+/learn                # extract real code patterns into patterns.md
 /fix login crash      # bug fix playbook
 /feature user auth    # new feature playbook
 /research best ORM    # research only, no code
@@ -81,7 +82,7 @@ Session hook auto-loads `primer.md` + `gotchas.md`.
 /wrap-up
 ```
 
-Writes a structured handoff to `primer.md`. Next session picks up exactly where you left off.
+Writes a structured handoff to `primer.md`, logs decisions to `decisions.md`. Next session picks up exactly where you left off.
 
 ## What Gets Installed
 
@@ -90,6 +91,8 @@ your-project/
 ├── CLAUDE.md                    <- Layer 1: Operating rules (customize!)
 ├── primer.md                    <- Layer 4: Session state (auto-loaded)
 ├── gotchas.md                   <- Layer 4: Mistake log (auto-loaded)
+├── patterns.md                  <- Layer 4: Code patterns (auto-loaded, populated by /learn)
+├── decisions.md                 <- Layer 4: Decision log (auto-loaded, updated by /wrap-up)
 ├── CHEATSHEET.md                <- Layer 3: Reference index
 ├── .claudeignore
 ├── .worktreeinclude
@@ -107,6 +110,7 @@ your-project/
     │   ├── onboard.md           /onboard [deep] [task]
     │   ├── wrap-up.md           /wrap-up
     │   ├── init.md              /init (auto-analyze codebase)
+    │   ├── learn.md             /learn (extract patterns into patterns.md)
     │   ├── fix.md               /fix <bug description>
     │   ├── feature.md           /feature <feature description>
     │   ├── refactor.md          /refactor <what and why>
@@ -121,14 +125,15 @@ your-project/
 
 ## Commands
 
-### Session
+### Session & Knowledge
 | Command | Purpose |
 |---------|---------|
 | `/onboard` | Status check — read context, report, wait for instructions |
 | `/onboard deep` | Full onboard — explore project, check health, deep report |
 | `/onboard <task>` | Light onboard — focused on a task, start immediately |
-| `/wrap-up` | Structured handoff — saves state for next session |
+| `/wrap-up` | Structured handoff — saves state + decisions for next session |
 | `/init` | Auto-analyze codebase and generate CLAUDE.md Section 10 config |
+| `/learn` | Extract real code patterns into patterns.md (auto-loaded each session) |
 
 ### Task Playbooks
 | Command | Purpose |
@@ -155,21 +160,33 @@ your-project/
 | `test-runner` | Sonnet | Before commits |
 | `researcher` | Sonnet | Investigation tasks |
 
+## Hooks (Automated Enforcement)
+
+Three hooks enforce discipline without you having to remind Claude:
+
+| Hook | Type | What it does |
+|------|------|-------------|
+| **SessionStart** | command | Loads primer.md, gotchas.md, patterns.md, decisions.md + shows git commits since last session |
+| **Stop** | prompt | Verification gate — Haiku blocks Claude from claiming "Done" without showing test output |
+| **PreToolUse(Edit\|Write)** | command | Injects reminder to re-read the file before editing (via `additionalContext`) |
+
 ## How Session Memory Works
 
 ```
 Session Start
   |
-Hook loads primer.md + gotchas.md
+Hook loads: primer.md, gotchas.md, patterns.md, decisions.md
+  + git commits since last session
   |
-Claude knows: last session state, next steps, mistakes to avoid
+Claude knows: project state, mistakes to avoid, code patterns,
+  settled decisions, what changed between sessions
   |
 Work (with playbooks, sub-agents, verification)
   |
 /wrap-up writes structured handoff:
   - What changed (files + reasons)
   - Uncommitted changes
-  - Test status, decisions, risks
+  - Test status, decisions made, risks
   - Next steps + recommended command
   |
 Next session resumes cleanly
@@ -181,7 +198,7 @@ Next session resumes cleanly
 bash <(curl -fsSL https://raw.githubusercontent.com/codeverbojan/claude-code-kickstart/main/install.sh) --update
 ```
 
-Updates agents, commands, skills, and CHEATSHEET to the latest version. Preserves your customized files: CLAUDE.md, primer.md, gotchas.md, settings.json, mcp.json. Your custom agents/commands are not deleted.
+Updates agents, commands, skills, and CHEATSHEET to latest. Preserves: CLAUDE.md, primer.md, gotchas.md, patterns.md, decisions.md, settings.json, mcp.json. Your custom agents/commands are not deleted.
 
 ## Starter Configs
 
@@ -211,21 +228,23 @@ claude plugin install socraticode@socraticode
 
 1. **Layered architecture** — Rules / Playbooks / Reference / Memory. Only load what's needed.
 2. **Auto-detection** — Installer reads project files, not just asks questions.
-3. **Task playbooks** — `/fix`, `/feature`, `/refactor`, `/research` — right behavior instantly.
-4. **Tiered onboarding** — Bare `/onboard` = status. With task = light. With `deep` = full.
-5. **Structured handoffs** — `/wrap-up` produces standard format, not freeform text.
-6. **Mistake memory** — `gotchas.md` ensures errors never repeat across sessions.
-7. **Forced verification with proof** — Tests must pass AND show output before "Done!"
-8. **Anti-rationalization** — Playbooks explicitly block common excuses for skipping steps.
-9. **Two-stage code review** — Spec compliance first, then code quality.
-10. **Supply chain guards** — `.npmrc` with `ignore-scripts`, 7-day soak period, pinned versions.
-11. **Updatable** — `--update` pulls latest without touching your config.
+3. **Project intelligence** — `/learn` extracts real patterns, `decisions.md` preserves WHY.
+4. **Git-aware sessions** — Hook shows commits since last session on startup.
+5. **Task playbooks** — `/fix`, `/feature`, `/refactor`, `/research` — right behavior instantly.
+6. **Tiered onboarding** — Bare `/onboard` = status. With task = light. With `deep` = full.
+7. **Structured handoffs** — `/wrap-up` produces standard format with decisions and risks.
+8. **Mistake memory** — `gotchas.md` ensures errors never repeat across sessions.
+9. **Hook enforcement** — Stop hook blocks unverified "Done" claims. PreToolUse reminds re-reads.
+10. **Anti-rationalization** — Playbooks explicitly block common excuses for skipping steps.
+11. **Two-stage code review** — Spec compliance first, then code quality.
+12. **Supply chain guards** — `.npmrc` with `ignore-scripts`, 7-day soak period, pinned versions.
+13. **Updatable** — `--update` pulls latest without touching your config.
 
 ## FAQ
 
 **Works with any language?** Yes. Language-agnostic. The installer supports Node, Python, Go, Rust out of the box. For others, run `/init` to auto-configure.
 
-**Slows down Claude?** No. Hook loads two small files. Agents launch only when needed.
+**Slows down Claude?** No. Hook loads four small files. Agents launch only when needed. Stop hook adds ~2s per response.
 
 **Existing project?** Yes. Installer never overwrites. Copies individual files.
 
