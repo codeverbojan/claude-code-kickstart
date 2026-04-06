@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "cat primer.md 2>/dev/null && echo '\\n---GOTCHAS---\\n' && cat gotchas.md 2>/dev/null || true",
+            "command": "(cat primer.md 2>/dev/null; printf '\\n---GOTCHAS---\\n'; cat gotchas.md 2>/dev/null; printf '\\n---PATTERNS---\\n'; cat patterns.md 2>/dev/null; printf '\\n---DECISIONS---\\n'; cat decisions.md 2>/dev/null) 2>/dev/null || true",
             "statusMessage": "Loading project context..."
           }
         ]

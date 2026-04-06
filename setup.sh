@@ -372,7 +372,7 @@ copy_force() {
 
 if [ "$UPDATE_MODE" = true ]; then
   echo -e "  ${BOLD}Updating${RESET} in: ${BOLD}$(pwd)${RESET}"
-  echo -e "${DIM}  Preserving: CLAUDE.md, primer.md, gotchas.md, settings.json, mcp.json${RESET}"
+  echo -e "${DIM}  Preserving: CLAUDE.md, primer.md, gotchas.md, patterns.md, decisions.md, settings.json, mcp.json${RESET}"
   echo ""
 
   # Update CHEATSHEET and ignore files (safe to overwrite)
@@ -413,6 +413,8 @@ else
   copy_safe "$TMP_DIR/CLAUDE.md" "CLAUDE.md"
   copy_safe "$TMP_DIR/primer.md" "primer.md"
   copy_safe "$TMP_DIR/gotchas.md" "gotchas.md"
+  copy_safe "$TMP_DIR/patterns.md" "patterns.md"
+  copy_safe "$TMP_DIR/decisions.md" "decisions.md"
   copy_safe "$TMP_DIR/CHEATSHEET.md" "CHEATSHEET.md"
   copy_safe "$TMP_DIR/.claudeignore" ".claudeignore"
   copy_safe "$TMP_DIR/.worktreeinclude" ".worktreeinclude"
