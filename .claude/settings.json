@@ -29,7 +29,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "jq -n '{hookSpecificOutput: {hookEventName: \"PreToolUse\", additionalContext: \"REMINDER: Did you Read this file in this conversation turn? Edit fails silently on stale content. Re-read before editing.\"}}'",
+            "command": "printf '%s' '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"additionalContext\":\"REMINDER: Did you Read this file in this conversation turn? Edit fails silently on stale content. Re-read before editing.\"}}'",
             "timeout": 2
           }
         ]

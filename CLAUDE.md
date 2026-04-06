@@ -1,5 +1,5 @@
 **NEVER claim "Done" without showing fresh passing test/lint/typecheck output
-in the SAME message. This is enforced by a Stop hook — you will be blocked.**
+in the SAME message. This is checked by a Stop hook.**
 
 **For multi-step tasks: create tasks with TaskCreate. For 5+ files: use sub-agents.**
 
@@ -162,6 +162,5 @@ errors outstanding. If tests don't exist for the feature, say so.
 
 ---
 
-**REMINDER: Show fresh verification output before claiming done. Use TaskCreate
-for multi-step work. Use sub-agents for 5+ independent files. These are
-enforced by hooks, not suggestions.**
+**REMINDER: Verification is enforced by a Stop hook — show fresh output.
+TaskCreate for multi-step work and sub-agents for 5+ files are expected.**
