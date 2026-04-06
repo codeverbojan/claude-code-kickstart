@@ -13,6 +13,7 @@
 | `/refactor <description>` | Refactor playbook |
 | `/api-route <description>` | API route playbook |
 | `/research <question>` | Research-only playbook (no code) |
+| `/init` | Auto-analyze codebase and generate CLAUDE.md Section 10 config |
 | `/test` | Run full test suite |
 | `/lint` | Run type-checker + linter + formatter |
 
