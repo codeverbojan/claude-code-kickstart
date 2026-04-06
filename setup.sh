@@ -530,4 +530,4 @@ echo "    4. Type /wrap-up when done to save session state"
 echo ""
 
 # Cleanup temp dir (install.sh's trap doesn't fire after exec)
-[ -d "$TMP_DIR" ] && [[ "$TMP_DIR" == /tmp/* || "$TMP_DIR" == /var/folders/* ]] && rm -rf "$TMP_DIR"
+[ -d "$TMP_DIR" ] && [[ "$TMP_DIR" == /tmp/* || "$TMP_DIR" == /var/folders/* ]] && rm -rf "$TMP_DIR" || true
