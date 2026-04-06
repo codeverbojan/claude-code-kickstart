@@ -1,0 +1,55 @@
+# Build outputs
+**/node_modules/
+**/.next/
+**/dist/
+**/build/
+**/.turbo/
+**/coverage/
+**/__pycache__/
+**/.pytest_cache/
+**/target/
+**/out/
+**/.venv/
+**/venv/
+**/vendor/
+**/.gradle/
+**/.terraform/
+
+# Binary files
+**/*.woff
+**/*.woff2
+**/*.ttf
+**/*.otf
+**/*.eot
+**/*.ico
+**/*.png
+**/*.jpg
+**/*.jpeg
+**/*.gif
+**/*.webp
+**/*.svg
+**/*.mp4
+**/*.pdf
+**/*.zip
+**/*.tar.gz
+
+# Generated / minified
+**/*.map
+**/*.min.js
+**/*.min.css
+
+# OS files
+**/.DS_Store
+**/Thumbs.db
+
+# Lock files (large, not useful for context)
+pnpm-lock.yaml
+package-lock.json
+yarn.lock
+Cargo.lock
+poetry.lock
+Gemfile.lock
+
+# Environment files
+.env
+.env.*

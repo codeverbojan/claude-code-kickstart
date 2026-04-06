@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cat primer.md 2>/dev/null && echo '\\n---GOTCHAS---\\n' && cat gotchas.md 2>/dev/null || true",
+            "statusMessage": "Loading project context..."
+          }
+        ]
+      }
+    ]
+  },
+  "worktree": {
+    "symlinkDirectories": [
+      "node_modules",
+      ".pnpm-store"
+    ]
+  },
+  "permissions": {
+    "allow": [
+      "Bash(ls:*)",
+      "Bash(mkdir:*)",
+      "Bash(cp:*)",
+      "Bash(mv:*)",
+      "Bash(git:*)",
+      "Bash(git *)",
+      "Bash(npm:*)",
+      "Bash(npm *)",
+      "Bash(pnpm:*)",
+      "Bash(pnpm *)",
+      "Bash(npx:*)",
+      "Bash(npx *)",
+      "Bash(yarn:*)",
+      "Bash(yarn *)",
+      "Bash(node:*)",
+      "Bash(node *)",
+      "Bash(docker:*)",
+      "Bash(docker *)",
+      "Bash(docker-compose:*)",
+      "Bash(docker-compose *)",
+      "Bash(curl:*)",
+      "Bash(curl *)",
+      "Bash(gh:*)",
+      "Bash(gh *)",
+      "Bash(chmod:*)",
+      "Bash(cat:*)",
+      "Bash(echo:*)",
+      "Bash(grep:*)",
+      "Bash(find:*)",
+      "Bash(sed:*)",
+      "Bash(wc:*)",
+      "Bash(sort:*)",
+      "Bash(head:*)",
+      "Bash(tail:*)",
+      "Bash(for:*)",
+      "Bash(cd:*)",
+      "Bash(python3:*)",
+      "WebSearch"
+    ]
+  }
+}
