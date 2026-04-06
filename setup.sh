@@ -196,6 +196,44 @@ if [ "$DETECTED" = true ] && [ "$SKIP_WIZARD" = false ]; then
   if [ "$CONFIRM" = "n" ] || [ "$CONFIRM" = "N" ]; then
     DETECTED=false
   else
+    # Check for matching starter config
+    STARTER_FILE=""
+    USE_STARTER_CONFIG=""
+    case "$STACK" in
+      node)
+        if [ -f "package.json" ] && grep -q '"next"' package.json 2>/dev/null; then
+          STARTER_FILE="$TMP_DIR/starters/nextjs.md"
+          STARTER_NAME="Next.js"
+        fi
+        ;;
+      python)
+        if [ -f "pyproject.toml" ] && grep -q "fastapi" pyproject.toml 2>/dev/null; then
+          STARTER_FILE="$TMP_DIR/starters/fastapi.md"
+          STARTER_NAME="FastAPI"
+        fi
+        ;;
+      go)
+        if [ -f "go.mod" ] && grep -q "chi\|gin\|echo\|fiber\|net/http" go.mod 2>/dev/null; then
+          STARTER_FILE="$TMP_DIR/starters/go-api.md"
+          STARTER_NAME="Go API"
+        fi
+        ;;
+      rust)
+        if [ -f "Cargo.toml" ] && grep -q "clap" Cargo.toml 2>/dev/null; then
+          STARTER_FILE="$TMP_DIR/starters/rust-cli.md"
+          STARTER_NAME="Rust CLI"
+        fi
+        ;;
+    esac
+
+    if [ -n "$STARTER_FILE" ] && [ -f "$STARTER_FILE" ]; then
+      printf "  Use ${BOLD}$STARTER_NAME${RESET} starter config for Section 10? [${BOLD}Y${RESET}/n]: "
+      read -r USE_STARTER
+      if [ "$USE_STARTER" != "n" ] && [ "$USE_STARTER" != "N" ]; then
+        USE_STARTER_CONFIG="$STARTER_FILE"
+      fi
+    fi
+
     # Ask for conventions (only thing we can't auto-detect)
     printf "  Code conventions to enforce? (optional): "
     read -r CONVENTIONS
@@ -412,20 +450,29 @@ fi
 
 # ─── Configure from detection / wizard answers (skip in update mode) ───
 
-if [ "$UPDATE_MODE" != true ] && { [ -n "$CMD_DEV" ] || [ -n "$CMD_TEST" ] || [ -n "$CONVENTIONS" ]; }; then
-  CONFIG_SECTION="## 10. Project-Specific Configuration"
-  CONFIG_SECTION="$CONFIG_SECTION\n"
+if [ "$UPDATE_MODE" != true ] && { [ -n "$CMD_DEV" ] || [ -n "$CMD_TEST" ] || [ -n "$CONVENTIONS" ] || [ -n "${USE_STARTER_CONFIG:-}" ]; }; then
 
-  if [ -n "$PROJECT_NAME" ]; then
-    CONFIG_SECTION="$CONFIG_SECTION\n### Project\n$PROJECT_NAME\n"
-  fi
+  # If a starter config was chosen, use it directly
+  if [ -n "${USE_STARTER_CONFIG:-}" ] && [ -f "$USE_STARTER_CONFIG" ]; then
+    CONFIG_SECTION=$(cat "$USE_STARTER_CONFIG")
+    if [ -n "$CONVENTIONS" ]; then
+      CONFIG_SECTION="$CONFIG_SECTION\n\n### Additional Conventions\n$CONVENTIONS"
+    fi
+  else
+    # Build config from auto-detected/wizard values
+    CONFIG_SECTION="## 10. Project-Specific Configuration"
+    CONFIG_SECTION="$CONFIG_SECTION\n"
 
-  case "$STACK" in
-    node)   CONFIG_SECTION="$CONFIG_SECTION\n### Stack\nNode.js / TypeScript\n" ;;
-    python) CONFIG_SECTION="$CONFIG_SECTION\n### Stack\nPython\n" ;;
-    go)     CONFIG_SECTION="$CONFIG_SECTION\n### Stack\nGo\n" ;;
-    rust)   CONFIG_SECTION="$CONFIG_SECTION\n### Stack\nRust\n" ;;
-  esac
+    if [ -n "$PROJECT_NAME" ]; then
+      CONFIG_SECTION="$CONFIG_SECTION\n### Project\n$PROJECT_NAME\n"
+    fi
+
+    case "$STACK" in
+      node)   CONFIG_SECTION="$CONFIG_SECTION\n### Stack\nNode.js / TypeScript\n" ;;
+      python) CONFIG_SECTION="$CONFIG_SECTION\n### Stack\nPython\n" ;;
+      go)     CONFIG_SECTION="$CONFIG_SECTION\n### Stack\nGo\n" ;;
+      rust)   CONFIG_SECTION="$CONFIG_SECTION\n### Stack\nRust\n" ;;
+    esac
 
   if [ -n "$CMD_DEV" ] || [ -n "$CMD_TEST" ]; then
     CONFIG_SECTION="$CONFIG_SECTION\n### Build & Dev Commands"
@@ -442,6 +489,7 @@ if [ "$UPDATE_MODE" != true ] && { [ -n "$CMD_DEV" ] || [ -n "$CMD_TEST" ] || [ 
   fi
 
   CONFIG_SECTION="$CONFIG_SECTION\n### Architecture\n<!-- Describe directory structure, module boundaries, data flow -->"
+  fi  # end of else (non-starter config)
 
   # Replace Section 10 in CLAUDE.md — only if it still has the default placeholder
   if [ -f "CLAUDE.md" ]; then
@@ -449,7 +497,13 @@ if [ "$UPDATE_MODE" != true ] && { [ -n "$CMD_DEV" ] || [ -n "$CMD_TEST" ] || [ 
     if [ -n "$SECTION_LINE" ]; then
       if grep -q "<!-- Example:" CLAUDE.md 2>/dev/null || grep -q "<!-- Describe directory" CLAUDE.md 2>/dev/null; then
         head -n $((SECTION_LINE - 1)) CLAUDE.md > CLAUDE.md.tmp
-        echo -e "$CONFIG_SECTION" >> CLAUDE.md.tmp
+        if [ -n "${USE_STARTER_CONFIG:-}" ]; then
+          # Starter content has real newlines from cat — use printf to avoid escape corruption
+          printf '%s\n' "$CONFIG_SECTION" >> CLAUDE.md.tmp
+        else
+          # Auto-generated content uses \n literals — needs echo -e
+          echo -e "$CONFIG_SECTION" >> CLAUDE.md.tmp
+        fi
         mv CLAUDE.md.tmp CLAUDE.md
         echo -e "  ${GREEN}[CONFIGURED]${RESET} CLAUDE.md Section 10"
       else
