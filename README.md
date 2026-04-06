@@ -4,7 +4,9 @@ Production-grade agentic workflow template for [Claude Code](https://docs.anthro
 
 ## Prerequisites
 
-- [Claude Code](https://docs.anthropic.com/en/docs/claude-code) installed (`npm install -g @anthropic-ai/claude-code`)
+- [Claude Code](https://docs.anthropic.com/en/docs/claude-code) installed:
+  - macOS, Linux, WSL: `curl -fsSL https://claude.ai/install.sh | bash`
+  - Windows PowerShell: `irm https://claude.ai/install.ps1 | iex`
 - Git
 - A project (or start fresh)
 
