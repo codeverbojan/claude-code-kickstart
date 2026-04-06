@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "(cat primer.md 2>/dev/null; printf '\\n---GOTCHAS---\\n'; cat gotchas.md 2>/dev/null; printf '\\n---PATTERNS---\\n'; cat patterns.md 2>/dev/null; printf '\\n---DECISIONS---\\n'; cat decisions.md 2>/dev/null) 2>/dev/null || true",
+            "command": "(cat primer.md 2>/dev/null; printf '\\n---GOTCHAS---\\n'; cat gotchas.md 2>/dev/null; printf '\\n---PATTERNS---\\n'; cat patterns.md 2>/dev/null; printf '\\n---DECISIONS---\\n'; cat decisions.md 2>/dev/null; if git rev-parse --git-dir >/dev/null 2>&1 && [ -f primer.md ]; then MTIME=$(stat -f%m primer.md 2>/dev/null || stat -c%Y primer.md 2>/dev/null); if [ -n \"$MTIME\" ]; then SINCE=$(date -r \"$MTIME\" '+%Y-%m-%d %H:%M' 2>/dev/null || date -d \"@$MTIME\" '+%Y-%m-%d %H:%M' 2>/dev/null); ALL=$(git log --oneline --since=\"$MTIME\" 2>/dev/null); if [ -n \"$ALL\" ]; then COUNT=$(printf '%s\\n' \"$ALL\" | wc -l | tr -d ' '); SHOWN=$(printf '%s\\n' \"$ALL\" | head -15); printf '\\n---SINCE LAST SESSION---\\n'; printf 'Commits since %s:\\n%s\\n' \"$SINCE\" \"$SHOWN\"; if [ \"$COUNT\" -gt 15 ]; then printf '... and %d more commits\\n' \"$((COUNT - 15))\"; fi; fi; fi; fi) 2>/dev/null || true",
             "statusMessage": "Loading project context..."
           }
         ]
