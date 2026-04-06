@@ -247,14 +247,19 @@ if [ -n "$CMD_DEV" ] || [ -n "$CONVENTIONS" ]; then
 
   CONFIG_SECTION="$CONFIG_SECTION\n### Architecture\n<!-- Describe directory structure, module boundaries, data flow -->"
 
-  # Replace Section 10 in CLAUDE.md
+  # Replace Section 10 in CLAUDE.md — only if it still has the default placeholder
   if [ -f "CLAUDE.md" ]; then
     SECTION_LINE=$(grep -n "^## 10\. Project-Specific Configuration" CLAUDE.md | head -1 | cut -d: -f1)
     if [ -n "$SECTION_LINE" ]; then
-      head -n $((SECTION_LINE - 1)) CLAUDE.md > CLAUDE.md.tmp
-      echo -e "$CONFIG_SECTION" >> CLAUDE.md.tmp
-      mv CLAUDE.md.tmp CLAUDE.md
-      echo -e "  ${GREEN}[CONFIGURED]${RESET} CLAUDE.md Section 10"
+      # Check if Section 10 still contains the placeholder comment (i.e. not yet customized)
+      if grep -q "<!-- Example:" CLAUDE.md 2>/dev/null || grep -q "<!-- Describe directory" CLAUDE.md 2>/dev/null; then
+        head -n $((SECTION_LINE - 1)) CLAUDE.md > CLAUDE.md.tmp
+        echo -e "$CONFIG_SECTION" >> CLAUDE.md.tmp
+        mv CLAUDE.md.tmp CLAUDE.md
+        echo -e "  ${GREEN}[CONFIGURED]${RESET} CLAUDE.md Section 10"
+      else
+        echo -e "  ${DIM}[SKIP]${RESET} CLAUDE.md Section 10 already customized"
+      fi
     fi
   fi
 
