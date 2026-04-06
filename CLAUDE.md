@@ -56,6 +56,10 @@ You are FORBIDDEN from reporting a task as complete until you have:
 - Run the project's type-checker / compiler
 - Run all configured linters
 - Run the test suite
+- Shown the passing output in THIS message (not a previous one)
+
+Thinking "the tests probably pass" or "I already ran them earlier"? Stop.
+That's rationalization. Run them again. Fresh output or it didn't happen.
 
 If these tools aren't configured, say so explicitly. Never say "Done!" with
 errors outstanding. If tests don't exist for the feature, say so.

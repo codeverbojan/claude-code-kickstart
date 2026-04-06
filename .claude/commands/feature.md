@@ -24,6 +24,7 @@ description: New feature playbook — plan, build in phases, verify each phase
 - Run type-checker
 - Run linter
 - Run tests
+- Show passing output in this message. No skipping "because the last phase passed."
 - Phase must compile and pass before moving to next phase.
 
 ## 5. Wrap

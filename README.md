@@ -229,6 +229,25 @@ Edit `.claude/mcp.json`:
 }
 ```
 
+## Recommended Add-ons
+
+### SocratiCode (large codebases)
+
+If your project is 100k+ lines or a monorepo, add [SocratiCode](https://github.com/giancarloerra/SocratiCode) for semantic code search, dependency graphs, and context artifacts. Requires Docker.
+
+Install as a Claude Code plugin:
+```bash
+claude plugin marketplace add giancarloerra/socraticode
+claude plugin install socraticode@socraticode
+```
+
+Or as MCP server only:
+```bash
+claude mcp add socraticode -- npx -y socraticode
+```
+
+Not included by default because it requires Docker and adds overhead that small/medium projects don't need. For large codebases, it's a significant upgrade over grep-based search.
+
 ## Key Patterns
 
 1. **Layered architecture** — Rules / Playbooks / Reference / Memory. Only load what's needed.
@@ -236,9 +255,11 @@ Edit `.claude/mcp.json`:
 3. **Tiered onboarding** — Bare `/onboard` = status. With task = light. With `deep` = full.
 4. **Structured handoffs** — `/wrap-up` produces standard format, not freeform text.
 5. **Mistake memory** — `gotchas.md` ensures errors never repeat across sessions.
-6. **Forced verification** — Tests must pass before "Done!"
-7. **Sub-agent swarming** — Parallel agents for large tasks.
-8. **Latest version enforcement** — Always current packages, never outdated.
+6. **Forced verification with proof** — Tests must pass AND show output before "Done!"
+7. **Anti-rationalization** — Playbooks explicitly block common excuses for skipping steps.
+8. **Two-stage code review** — Spec compliance first, then code quality. Separate passes.
+9. **Sub-agent swarming** — Parallel agents for large tasks.
+10. **Latest version enforcement** — Always current packages, never outdated.
 
 ## FAQ
 

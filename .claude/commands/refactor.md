@@ -23,6 +23,7 @@ description: Refactor playbook — clean up without changing behavior
 - Run linter
 - Run full test suite (refactors can break things you don't expect)
 - Verify no behavior change — same inputs, same outputs.
+- Show passing output. "It's just a rename, it'll be fine" is rationalization.
 
 ## 5. Review
 - Ask yourself: "Is this actually simpler, or did I just move complexity?"
