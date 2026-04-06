@@ -54,10 +54,34 @@ Completely replace `primer.md` with this exact structure:
 - [Files the next session should read first]
 ```
 
-## 3. Update gotchas.md (if needed)
+## 3. Update decisions.md (if decisions were made)
+
+If any technical decisions, architecture choices, or tradeoff judgments were
+made this session, APPEND them to `decisions.md`. Never overwrite existing entries.
+
+Format for each new decision:
+```markdown
+## [Date]: [Short title]
+**Choice:** [What was decided]
+**Why:** [The reasoning — constraints, tradeoffs, alternatives rejected]
+**Context:** [What prompted this decision]
+```
+
+Before appending, check if a decision with the same title already exists in
+decisions.md. If it does, skip it (don't create duplicates).
+
+Only log decisions that a future session would need to know about.
+Don't log trivial choices (variable names, formatting). Log choices that
+would be re-litigated if someone didn't know the reasoning:
+- Technology/library choices
+- Architecture decisions
+- Pattern decisions (why X approach over Y)
+- Scope decisions (why something was deferred or cut)
+
+## 4. Update gotchas.md (if needed)
 If any mistakes were made this session, append a numbered rule.
 
-## 4. Report to user
+## 5. Report to user
 - One-paragraph summary of the session
 - Any uncommitted changes needing attention
 - Any failing checks

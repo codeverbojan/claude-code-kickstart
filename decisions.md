@@ -1,7 +1,10 @@
 # Decision Log
 
-Why decisions were made. Read at session start to avoid re-litigating settled choices.
-Updated by `/wrap-up` when decisions are made during a session.
+**RULE: All decisions below are settled. Do not propose alternatives unless
+the user explicitly asks to revisit a decision.**
+
+Updated by `/wrap-up`. If this file exceeds 30 entries, summarize the oldest
+10 into a `## Historical Summary` section at the bottom.
 
 ---
 

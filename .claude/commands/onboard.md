@@ -13,11 +13,13 @@ Full context load for major work:
 
 1. Read `primer.md` — current state, next steps, blockers
 2. Read `gotchas.md` — all rules learned from past mistakes
-3. Explore project structure — key directories, config files, entry points
-4. Check `git status` for uncommitted changes
-5. Run type-checker/linter if configured, report health
-6. Read any architecture docs if they exist (docs/, ARCHITECTURE.md, etc.)
-7. Report back:
+3. Read `patterns.md` — how this project does things (if populated)
+4. Read `decisions.md` — why past decisions were made (don't re-litigate these)
+5. Explore project structure — key directories, config files, entry points
+6. Check `git status` for uncommitted changes
+7. Run type-checker/linter if configured, report health
+8. Read any architecture docs if they exist (docs/, ARCHITECTURE.md, etc.)
+9. Report back:
    - Where are we? (current state, what's done, what's not)
    - Project structure overview
    - Uncommitted changes or dirty state
