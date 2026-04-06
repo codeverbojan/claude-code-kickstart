@@ -13,7 +13,7 @@ Production-grade agentic workflow template for [Claude Code](https://docs.anthro
 Run this in your project root:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/codeverbojan/claude-code-kickstart/main/install.sh | bash
+bash <(curl -fsSL https://raw.githubusercontent.com/codeverbojan/claude-code-kickstart/main/install.sh)
 ```
 
 The interactive wizard asks:
@@ -27,7 +27,7 @@ It then auto-configures CLAUDE.md, settings.json permissions, and worktree symli
 Skip the wizard with `--skip-wizard`:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/codeverbojan/claude-code-kickstart/main/install.sh | bash -s -- --skip-wizard
+bash <(curl -fsSL https://raw.githubusercontent.com/codeverbojan/claude-code-kickstart/main/install.sh) --skip-wizard
 ```
 
 Or clone and run manually:
