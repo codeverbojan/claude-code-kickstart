@@ -113,8 +113,8 @@ your-project/
     │   ├── test.md              /test
     │   └── lint.md              /lint
     └── skills/                  <- Layer 3: Domain knowledge
-        ├── security/
-        └── test-runner/
+        ├── securing-code/
+        └── running-tests/
 ```
 
 ## Commands

@@ -32,5 +32,5 @@ Always follow this sequence in every server-side handler:
 
 - Pin exact versions — no `^` or `~` in production deps
 - Review `postinstall` scripts before adding any new dependency
-- Reference: April 2026 Axios attack — maintainer account takeover injected
-  phantom dependency with malicious postinstall hook
+- Watch for supply chain patterns: account takeovers, phantom dependencies,
+  malicious postinstall hooks
