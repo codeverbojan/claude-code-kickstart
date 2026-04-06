@@ -10,10 +10,12 @@ shift 2>/dev/null || true
 
 TARGET_DIR="."
 SKIP_WIZARD=false
+UPDATE_MODE=false
 
 for arg in "$@"; do
   case "$arg" in
     --skip-wizard) SKIP_WIZARD=true ;;
+    --update) UPDATE_MODE=true; SKIP_WIZARD=true ;;
     *) TARGET_DIR="$arg" ;;
   esac
 done
@@ -319,52 +321,98 @@ if [ "$DETECTED" = false ] && [ "$SKIP_WIZARD" = false ]; then
   echo ""
 fi
 
-# ─── Install files ───
+# ─── Copy with overwrite (for update mode) ───
+copy_force() {
+  local src="$1"
+  local dst="$2"
+  mkdir -p "$(dirname "$dst")"
+  cp "$src" "$dst"
+  echo -e "  ${GREEN}[UPDATE]${RESET} $dst"
+}
 
-echo -e "  Installing into: ${BOLD}$(pwd)${RESET}"
-echo ""
+# ─── Install / Update files ───
 
-# Core files
-copy_safe "$TMP_DIR/CLAUDE.md" "CLAUDE.md"
-copy_safe "$TMP_DIR/primer.md" "primer.md"
-copy_safe "$TMP_DIR/gotchas.md" "gotchas.md"
-copy_safe "$TMP_DIR/CHEATSHEET.md" "CHEATSHEET.md"
-copy_safe "$TMP_DIR/.claudeignore" ".claudeignore"
-copy_safe "$TMP_DIR/.worktreeinclude" ".worktreeinclude"
+if [ "$UPDATE_MODE" = true ]; then
+  echo -e "  ${BOLD}Updating${RESET} in: ${BOLD}$(pwd)${RESET}"
+  echo -e "${DIM}  Preserving: CLAUDE.md, primer.md, gotchas.md, settings.json, mcp.json${RESET}"
+  echo ""
 
-# .claude config
-mkdir -p .claude
-copy_safe "$TMP_DIR/.claude/settings.json" ".claude/settings.json"
-copy_safe "$TMP_DIR/.claude/mcp.json" ".claude/mcp.json"
+  # Update CHEATSHEET and ignore files (safe to overwrite)
+  copy_force "$TMP_DIR/CHEATSHEET.md" "CHEATSHEET.md"
+  copy_force "$TMP_DIR/.claudeignore" ".claudeignore"
+  copy_force "$TMP_DIR/.worktreeinclude" ".worktreeinclude"
 
-# Agents
-mkdir -p .claude/agents
-for agent in "$TMP_DIR"/.claude/agents/*.md; do
-  [ -f "$agent" ] || continue
-  copy_safe "$agent" ".claude/agents/$(basename "$agent")"
-done
-
-# Commands
-mkdir -p .claude/commands
-for cmd in "$TMP_DIR"/.claude/commands/*.md; do
-  [ -f "$cmd" ] || continue
-  copy_safe "$cmd" ".claude/commands/$(basename "$cmd")"
-done
-
-# Skills
-for skill_dir in "$TMP_DIR"/.claude/skills/*/; do
-  [ -d "$skill_dir" ] || continue
-  skill_name=$(basename "$skill_dir")
-  mkdir -p ".claude/skills/$skill_name"
-  for skill_file in "$skill_dir"*; do
-    [ -f "$skill_file" ] || continue
-    copy_safe "$skill_file" ".claude/skills/$skill_name/$(basename "$skill_file")"
+  # Update all agents (overwrite with latest)
+  mkdir -p .claude/agents
+  for agent in "$TMP_DIR"/.claude/agents/*.md; do
+    [ -f "$agent" ] || continue
+    copy_force "$agent" ".claude/agents/$(basename "$agent")"
   done
-done
 
-# ─── Configure from detection / wizard answers ───
+  # Update all commands (overwrite with latest)
+  mkdir -p .claude/commands
+  for cmd in "$TMP_DIR"/.claude/commands/*.md; do
+    [ -f "$cmd" ] || continue
+    copy_force "$cmd" ".claude/commands/$(basename "$cmd")"
+  done
 
-if [ -n "$CMD_DEV" ] || [ -n "$CMD_TEST" ] || [ -n "$CONVENTIONS" ]; then
+  # Update all skills (overwrite with latest)
+  for skill_dir in "$TMP_DIR"/.claude/skills/*/; do
+    [ -d "$skill_dir" ] || continue
+    skill_name=$(basename "$skill_dir")
+    mkdir -p ".claude/skills/$skill_name"
+    for skill_file in "$skill_dir"*; do
+      [ -f "$skill_file" ] || continue
+      copy_force "$skill_file" ".claude/skills/$skill_name/$(basename "$skill_file")"
+    done
+  done
+
+else
+  echo -e "  Installing into: ${BOLD}$(pwd)${RESET}"
+  echo ""
+
+  # Core files (never overwrite)
+  copy_safe "$TMP_DIR/CLAUDE.md" "CLAUDE.md"
+  copy_safe "$TMP_DIR/primer.md" "primer.md"
+  copy_safe "$TMP_DIR/gotchas.md" "gotchas.md"
+  copy_safe "$TMP_DIR/CHEATSHEET.md" "CHEATSHEET.md"
+  copy_safe "$TMP_DIR/.claudeignore" ".claudeignore"
+  copy_safe "$TMP_DIR/.worktreeinclude" ".worktreeinclude"
+
+  # .claude config (never overwrite)
+  mkdir -p .claude
+  copy_safe "$TMP_DIR/.claude/settings.json" ".claude/settings.json"
+  copy_safe "$TMP_DIR/.claude/mcp.json" ".claude/mcp.json"
+
+  # Agents (individual, never overwrite)
+  mkdir -p .claude/agents
+  for agent in "$TMP_DIR"/.claude/agents/*.md; do
+    [ -f "$agent" ] || continue
+    copy_safe "$agent" ".claude/agents/$(basename "$agent")"
+  done
+
+  # Commands (individual, never overwrite)
+  mkdir -p .claude/commands
+  for cmd in "$TMP_DIR"/.claude/commands/*.md; do
+    [ -f "$cmd" ] || continue
+    copy_safe "$cmd" ".claude/commands/$(basename "$cmd")"
+  done
+
+  # Skills (individual, never overwrite)
+  for skill_dir in "$TMP_DIR"/.claude/skills/*/; do
+    [ -d "$skill_dir" ] || continue
+    skill_name=$(basename "$skill_dir")
+    mkdir -p ".claude/skills/$skill_name"
+    for skill_file in "$skill_dir"*; do
+      [ -f "$skill_file" ] || continue
+      copy_safe "$skill_file" ".claude/skills/$skill_name/$(basename "$skill_file")"
+    done
+  done
+fi
+
+# ─── Configure from detection / wizard answers (skip in update mode) ───
+
+if [ "$UPDATE_MODE" != true ] && { [ -n "$CMD_DEV" ] || [ -n "$CMD_TEST" ] || [ -n "$CONVENTIONS" ]; }; then
   CONFIG_SECTION="## 10. Project-Specific Configuration"
   CONFIG_SECTION="$CONFIG_SECTION\n"
 

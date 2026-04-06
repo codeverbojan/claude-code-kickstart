@@ -5,8 +5,11 @@ set -e
 #
 # This script downloads the template and launches the interactive wizard.
 #
-# Usage:
+# Install:
 #   bash <(curl -fsSL https://raw.githubusercontent.com/codeverbojan/claude-code-kickstart/main/install.sh)
+#
+# Update (preserves CLAUDE.md, primer.md, gotchas.md, settings.json, mcp.json):
+#   bash <(curl -fsSL https://raw.githubusercontent.com/codeverbojan/claude-code-kickstart/main/install.sh) --update
 #
 # Or clone and run:
 #   git clone https://github.com/codeverbojan/claude-code-kickstart.git /tmp/cck && bash /tmp/cck/setup.sh
