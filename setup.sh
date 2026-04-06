@@ -39,11 +39,24 @@ copy_safe() {
   echo -e "  ${GREEN}[COPY]${RESET} $dst"
 }
 
+# ─── Read a JSON key from package.json (no jq dependency) ───
+pkg_script() {
+  local key="$1"
+  python3 -c "
+import json, sys
+try:
+    d = json.load(open('package.json'))
+    v = d.get('scripts', {}).get('$key', '')
+    print(v)
+except: pass
+" 2>/dev/null
+}
+
 cd "$TARGET_DIR"
 
-# ─── Wizard ───
+# ─── Auto-Detection ───
 
-PROJECT_NAME=""
+PROJECT_NAME=$(basename "$(pwd)")
 STACK=""
 PKG_MGR=""
 CMD_DEV=""
@@ -52,9 +65,144 @@ CMD_LINT=""
 CMD_TEST=""
 CMD_BUILD=""
 CONVENTIONS=""
+DETECTED=false
 
-if [ "$SKIP_WIZARD" = false ]; then
+# Detect stack from project files
+if [ -f "package.json" ]; then
+  STACK="node"
+  DETECTED=true
 
+  # Detect package manager from lockfiles
+  if [ -f "pnpm-lock.yaml" ]; then
+    PKG_MGR="pnpm"
+  elif [ -f "bun.lockb" ] || [ -f "bun.lock" ]; then
+    PKG_MGR="bun"
+  elif [ -f "yarn.lock" ]; then
+    PKG_MGR="yarn"
+  elif [ -f "package-lock.json" ]; then
+    PKG_MGR="npm"
+  else
+    PKG_MGR="npm"
+  fi
+
+  # Read actual commands from package.json scripts
+  if command -v python3 &>/dev/null; then
+    _dev=$(pkg_script "dev")
+    _typecheck=$(pkg_script "typecheck")
+    _lint=$(pkg_script "lint")
+    _test=$(pkg_script "test")
+    _build=$(pkg_script "build")
+
+    # If script exists in package.json, use the package manager runner
+    if [ "$PKG_MGR" = "npm" ]; then
+      [ -n "$_dev" ] && CMD_DEV="npm run dev"
+      [ -n "$_typecheck" ] && CMD_TYPECHECK="npm run typecheck"
+      [ -n "$_lint" ] && CMD_LINT="npm run lint"
+      [ -n "$_test" ] && CMD_TEST="npm test"
+      [ -n "$_build" ] && CMD_BUILD="npm run build"
+    else
+      [ -n "$_dev" ] && CMD_DEV="${PKG_MGR} dev"
+      [ -n "$_typecheck" ] && CMD_TYPECHECK="${PKG_MGR} typecheck"
+      [ -n "$_lint" ] && CMD_LINT="${PKG_MGR} lint"
+      [ -n "$_test" ] && CMD_TEST="${PKG_MGR} test"
+      [ -n "$_build" ] && CMD_BUILD="${PKG_MGR} build"
+    fi
+  fi
+
+elif [ -f "go.mod" ]; then
+  STACK="go"
+  PKG_MGR="go"
+  DETECTED=true
+  CMD_DEV="go run ."
+  CMD_TYPECHECK="go vet ./..."
+  CMD_LINT="golangci-lint run"
+  CMD_TEST="go test ./..."
+  CMD_BUILD="go build ."
+
+  # Check for Makefile targets
+  if [ -f "Makefile" ]; then
+    grep -q "^dev:" Makefile 2>/dev/null && CMD_DEV="make dev"
+    grep -q "^test:" Makefile 2>/dev/null && CMD_TEST="make test"
+    grep -q "^lint:" Makefile 2>/dev/null && CMD_LINT="make lint"
+    grep -q "^build:" Makefile 2>/dev/null && CMD_BUILD="make build"
+  fi
+
+elif [ -f "Cargo.toml" ]; then
+  STACK="rust"
+  PKG_MGR="cargo"
+  DETECTED=true
+  CMD_DEV="cargo run"
+  CMD_TYPECHECK="cargo check"
+  CMD_LINT="cargo clippy"
+  CMD_TEST="cargo test"
+  CMD_BUILD="cargo build --release"
+
+elif [ -f "pyproject.toml" ] || [ -f "requirements.txt" ] || [ -f "setup.py" ]; then
+  STACK="python"
+  DETECTED=true
+
+  # Detect Python package manager
+  if [ -f "uv.lock" ]; then
+    PKG_MGR="uv"
+  elif [ -f "poetry.lock" ]; then
+    PKG_MGR="poetry"
+  elif [ -f "Pipfile.lock" ]; then
+    PKG_MGR="pipenv"
+  else
+    PKG_MGR="pip"
+  fi
+
+  CMD_TYPECHECK="mypy ."
+  CMD_LINT="ruff check ."
+  CMD_TEST="pytest"
+  CMD_BUILD=""
+
+  # Check for Makefile targets
+  if [ -f "Makefile" ]; then
+    grep -q "^dev:" Makefile 2>/dev/null && CMD_DEV="make dev"
+    grep -q "^test:" Makefile 2>/dev/null && CMD_TEST="make test"
+    grep -q "^lint:" Makefile 2>/dev/null && CMD_LINT="make lint"
+  fi
+
+  # Try to detect dev server from pyproject.toml
+  if [ -z "$CMD_DEV" ] && [ -f "pyproject.toml" ]; then
+    if grep -q "fastapi\|uvicorn" pyproject.toml 2>/dev/null; then
+      CMD_DEV="uvicorn main:app --reload"
+    elif grep -q "django" pyproject.toml 2>/dev/null; then
+      CMD_DEV="python manage.py runserver"
+    elif grep -q "flask" pyproject.toml 2>/dev/null; then
+      CMD_DEV="flask run --reload"
+    fi
+  fi
+fi
+
+# ─── Show Detection Results / Run Wizard ───
+
+if [ "$DETECTED" = true ] && [ "$SKIP_WIZARD" = false ]; then
+  echo -e "  ${GREEN}Auto-detected:${RESET}"
+  echo -e "    Project:  ${BOLD}$PROJECT_NAME${RESET}"
+  echo -e "    Stack:    ${BOLD}$STACK${RESET}"
+  echo -e "    Package:  ${BOLD}$PKG_MGR${RESET}"
+  [ -n "$CMD_DEV" ] && echo -e "    Dev:      ${DIM}$CMD_DEV${RESET}"
+  [ -n "$CMD_TYPECHECK" ] && echo -e "    Typecheck:${DIM} $CMD_TYPECHECK${RESET}"
+  [ -n "$CMD_LINT" ] && echo -e "    Lint:     ${DIM}$CMD_LINT${RESET}"
+  [ -n "$CMD_TEST" ] && echo -e "    Test:     ${DIM}$CMD_TEST${RESET}"
+  [ -n "$CMD_BUILD" ] && echo -e "    Build:    ${DIM}$CMD_BUILD${RESET}"
+  echo ""
+  printf "  Look right? [${BOLD}Y${RESET}/n]: "
+  read -r CONFIRM
+  if [ "$CONFIRM" = "n" ] || [ "$CONFIRM" = "N" ]; then
+    DETECTED=false
+  else
+    # Ask for conventions (only thing we can't auto-detect)
+    printf "  Code conventions to enforce? (optional): "
+    read -r CONVENTIONS
+    echo ""
+  fi
+fi
+
+if [ "$DETECTED" = false ] && [ "$SKIP_WIZARD" = false ]; then
+  # Full manual wizard
   echo -e "${BOLD}  Setup Wizard${RESET}"
   echo -e "${DIM}  Answer a few questions to configure your project. Press Enter to skip any.${RESET}"
   echo ""
@@ -214,9 +362,9 @@ for skill_dir in "$TMP_DIR"/.claude/skills/*/; do
   done
 done
 
-# ─── Configure from wizard answers ───
+# ─── Configure from detection / wizard answers ───
 
-if [ -n "$CMD_DEV" ] || [ -n "$CONVENTIONS" ]; then
+if [ -n "$CMD_DEV" ] || [ -n "$CMD_TEST" ] || [ -n "$CONVENTIONS" ]; then
   CONFIG_SECTION="## 10. Project-Specific Configuration"
   CONFIG_SECTION="$CONFIG_SECTION\n"
 
@@ -251,7 +399,6 @@ if [ -n "$CMD_DEV" ] || [ -n "$CONVENTIONS" ]; then
   if [ -f "CLAUDE.md" ]; then
     SECTION_LINE=$(grep -n "^## 10\. Project-Specific Configuration" CLAUDE.md | head -1 | cut -d: -f1)
     if [ -n "$SECTION_LINE" ]; then
-      # Check if Section 10 still contains the placeholder comment (i.e. not yet customized)
       if grep -q "<!-- Example:" CLAUDE.md 2>/dev/null || grep -q "<!-- Describe directory" CLAUDE.md 2>/dev/null; then
         head -n $((SECTION_LINE - 1)) CLAUDE.md > CLAUDE.md.tmp
         echo -e "$CONFIG_SECTION" >> CLAUDE.md.tmp
@@ -267,7 +414,6 @@ if [ -n "$CMD_DEV" ] || [ -n "$CONVENTIONS" ]; then
   if [ -f ".claude/settings.json" ]; then
     if ! command -v python3 &>/dev/null; then
       echo -e "  ${YELLOW}[WARN]${RESET} python3 not found — skipping settings.json customization"
-      echo -e "  ${DIM}  You can manually add stack-specific permissions to .claude/settings.json${RESET}"
     else
       case "$STACK" in
         rust)
@@ -308,7 +454,7 @@ with open('.claude/settings.json', 'w') as f: json.dump(s, f, indent=2); f.write
     fi
   fi
 
-  # Generate supply chain config for the selected stack
+  # Generate supply chain config
   case "$STACK" in
     node)
       if [ ! -f ".npmrc" ]; then
@@ -353,7 +499,6 @@ content = content.replace('Project initialized with Claude Code Kickstart templa
 open('primer.md', 'w').write(content)
 " 2>/dev/null
     else
-      # Fallback: use sed for simple replacement (no special chars)
       sed -i.bak "s/Project initialized with Claude Code Kickstart template/Project \"${PROJECT_NAME}\" initialized with Claude Code Kickstart template/" primer.md 2>/dev/null
       rm -f primer.md.bak 2>/dev/null
     fi
