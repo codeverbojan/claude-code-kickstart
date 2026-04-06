@@ -73,8 +73,14 @@ CMD_TEST=""
 CMD_BUILD=""
 CONVENTIONS=""
 
-if [ "$SKIP_WIZARD" = false ] && [ -t 0 ]; then
-  # Interactive terminal available — run wizard
+# Check if /dev/tty is available for interactive input (works even when piped)
+HAS_TTY=false
+if [ -e /dev/tty ]; then
+  HAS_TTY=true
+fi
+
+if [ "$SKIP_WIZARD" = false ] && [ "$HAS_TTY" = true ]; then
+  # Read from /dev/tty so the wizard works even when piped via curl | bash
 
   echo -e "${BOLD}  Setup Wizard${RESET}"
   echo -e "${DIM}  Answer a few questions to configure your project. Press Enter to skip any.${RESET}"
@@ -82,7 +88,8 @@ if [ "$SKIP_WIZARD" = false ] && [ -t 0 ]; then
 
   # 1. Project name
   DEFAULT_NAME=$(basename "$(pwd)")
-  read -r -p "  Project name [$DEFAULT_NAME]: " PROJECT_NAME
+  printf "  Project name [$DEFAULT_NAME]: "
+  read -r PROJECT_NAME </dev/tty
   PROJECT_NAME="${PROJECT_NAME:-$DEFAULT_NAME}"
 
   # 2. Stack
@@ -93,7 +100,8 @@ if [ "$SKIP_WIZARD" = false ] && [ -t 0 ]; then
   echo -e "  ${DIM}  3) Go${RESET}"
   echo -e "  ${DIM}  4) Rust${RESET}"
   echo -e "  ${DIM}  5) Other / Mixed${RESET}"
-  read -r -p "  Choice [1]: " STACK_CHOICE
+  printf "  Choice [1]: "
+  read -r STACK_CHOICE </dev/tty
   STACK_CHOICE="${STACK_CHOICE:-1}"
 
   case "$STACK_CHOICE" in
@@ -102,7 +110,8 @@ if [ "$SKIP_WIZARD" = false ] && [ -t 0 ]; then
       echo ""
       echo -e "  ${BOLD}Package manager?${RESET}"
       echo -e "  ${DIM}  1) pnpm  2) npm  3) yarn  4) bun${RESET}"
-      read -r -p "  Choice [1]: " PKG_CHOICE
+      printf "  Choice [1]: "
+      read -r PKG_CHOICE </dev/tty
       PKG_CHOICE="${PKG_CHOICE:-1}"
       case "$PKG_CHOICE" in
         1) PKG_MGR="pnpm" ;;
@@ -154,26 +163,27 @@ if [ "$SKIP_WIZARD" = false ] && [ -t 0 ]; then
   if [ "$STACK" != "other" ]; then
     echo ""
     echo -e "  ${BOLD}Commands${RESET} ${DIM}(press Enter to accept defaults)${RESET}"
-    read -r -p "  Dev server [$CMD_DEV]: " input; CMD_DEV="${input:-$CMD_DEV}"
-    read -r -p "  Type-check [$CMD_TYPECHECK]: " input; CMD_TYPECHECK="${input:-$CMD_TYPECHECK}"
-    read -r -p "  Lint [$CMD_LINT]: " input; CMD_LINT="${input:-$CMD_LINT}"
-    read -r -p "  Test [$CMD_TEST]: " input; CMD_TEST="${input:-$CMD_TEST}"
+    printf "  Dev server [$CMD_DEV]: "; read -r input </dev/tty; CMD_DEV="${input:-$CMD_DEV}"
+    printf "  Type-check [$CMD_TYPECHECK]: "; read -r input </dev/tty; CMD_TYPECHECK="${input:-$CMD_TYPECHECK}"
+    printf "  Lint [$CMD_LINT]: "; read -r input </dev/tty; CMD_LINT="${input:-$CMD_LINT}"
+    printf "  Test [$CMD_TEST]: "; read -r input </dev/tty; CMD_TEST="${input:-$CMD_TEST}"
     if [ -n "$CMD_BUILD" ]; then
-      read -r -p "  Build [$CMD_BUILD]: " input; CMD_BUILD="${input:-$CMD_BUILD}"
+      printf "  Build [$CMD_BUILD]: "; read -r input </dev/tty; CMD_BUILD="${input:-$CMD_BUILD}"
     fi
   else
     echo ""
     echo -e "  ${BOLD}Commands${RESET} ${DIM}(enter your project commands, or leave blank)${RESET}"
-    read -r -p "  Dev server: " CMD_DEV
-    read -r -p "  Type-check: " CMD_TYPECHECK
-    read -r -p "  Lint: " CMD_LINT
-    read -r -p "  Test: " CMD_TEST
-    read -r -p "  Build: " CMD_BUILD
+    printf "  Dev server: "; read -r CMD_DEV </dev/tty
+    printf "  Type-check: "; read -r CMD_TYPECHECK </dev/tty
+    printf "  Lint: "; read -r CMD_LINT </dev/tty
+    printf "  Test: "; read -r CMD_TEST </dev/tty
+    printf "  Build: "; read -r CMD_BUILD </dev/tty
   fi
 
   # 4. Conventions
   echo ""
-  read -r -p "  Any code conventions to enforce? (e.g. 'strict TypeScript, no any'): " CONVENTIONS
+  printf "  Any code conventions to enforce? (e.g. 'strict TypeScript, no any'): "
+  read -r CONVENTIONS </dev/tty
 
   echo ""
   echo -e "  ${GREEN}Got it.${RESET} Installing and configuring..."
