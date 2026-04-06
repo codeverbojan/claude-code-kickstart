@@ -8,20 +8,36 @@ Production-grade agentic workflow template for [Claude Code](https://docs.anthro
 - Git
 - A project (or start fresh)
 
-## One-Click Install
+## Install
+
+Run this in your project root:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/codeverbojan/claude-code-kickstart/main/install.sh | bash
 ```
 
-Or manually:
+The interactive wizard asks:
+1. **Stack** — Node/TypeScript, Python, Go, Rust, or Other
+2. **Package manager** — pnpm, npm, yarn, bun (for Node)
+3. **Commands** — dev, typecheck, lint, test, build (pre-filled with smart defaults)
+4. **Conventions** — any rules to enforce
+
+It then auto-configures CLAUDE.md, settings.json permissions, and worktree symlinks for your stack.
+
+Skip the wizard with `--skip-wizard`:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/codeverbojan/claude-code-kickstart/main/install.sh | bash -s -- --skip-wizard
+```
+
+Or clone and run manually:
 
 ```bash
 git clone https://github.com/codeverbojan/claude-code-kickstart.git /tmp/cck
 bash /tmp/cck/install.sh /path/to/your/project
 ```
 
-Never overwrites existing files. Safe on any project. Installs individual files, so your existing agents/commands won't be touched.
+Never overwrites existing files. Safe on any project.
 
 ## Architecture: 4 Layers
 
@@ -36,22 +52,10 @@ Claude only loads what it needs. Small fixes don't pay the cost of full onboardi
 
 ## Your First 5 Minutes
 
-### 1. Customize CLAUDE.md
+### 1. Run the installer
 
-Open `CLAUDE.md`, scroll to **Section 10**, fill in your stack:
-
-```markdown
-### Stack
-- Python 3.12 + FastAPI + Postgres
-
-### Build & Dev Commands
-- `make dev` — start dev server
-- `make test` — run pytest
-
-### Code Conventions
-- Type hints on all functions
-- Pydantic models for API schemas
-```
+The wizard configures your stack, commands, and conventions automatically.
+To fine-tune further, edit `CLAUDE.md` Section 10 directly.
 
 ### 2. Start Claude
 
