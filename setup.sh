@@ -93,11 +93,19 @@ if [ "$SKIP_WIZARD" = false ]; then
         4) PKG_MGR="bun" ;;
         *) PKG_MGR="pnpm" ;;
       esac
-      CMD_DEV="${PKG_MGR} dev"
-      CMD_TYPECHECK="${PKG_MGR} typecheck"
-      CMD_LINT="${PKG_MGR} lint"
-      CMD_TEST="${PKG_MGR} test"
-      CMD_BUILD="${PKG_MGR} build"
+      if [ "$PKG_MGR" = "npm" ]; then
+        CMD_DEV="npm run dev"
+        CMD_TYPECHECK="npm run typecheck"
+        CMD_LINT="npm run lint"
+        CMD_TEST="npm test"
+        CMD_BUILD="npm run build"
+      else
+        CMD_DEV="${PKG_MGR} dev"
+        CMD_TYPECHECK="${PKG_MGR} typecheck"
+        CMD_LINT="${PKG_MGR} lint"
+        CMD_TEST="${PKG_MGR} test"
+        CMD_BUILD="${PKG_MGR} build"
+      fi
       ;;
     2)
       STACK="python"
@@ -252,9 +260,13 @@ if [ -n "$CMD_DEV" ] || [ -n "$CONVENTIONS" ]; then
 
   # Stack-specific settings.json updates
   if [ -f ".claude/settings.json" ]; then
-    case "$STACK" in
-      rust)
-        python3 -c "
+    if ! command -v python3 &>/dev/null; then
+      echo -e "  ${YELLOW}[WARN]${RESET} python3 not found — skipping settings.json customization"
+      echo -e "  ${DIM}  You can manually add stack-specific permissions to .claude/settings.json${RESET}"
+    else
+      case "$STACK" in
+        rust)
+          python3 -c "
 import json
 with open('.claude/settings.json') as f: s = json.load(f)
 p = s.get('permissions', {}).get('allow', [])
@@ -262,10 +274,10 @@ for c in ['Bash(cargo:*)', 'Bash(cargo *)', 'Bash(rustup:*)']:
     if c not in p: p.append(c)
 s['permissions']['allow'] = p
 with open('.claude/settings.json', 'w') as f: json.dump(s, f, indent=2); f.write('\n')
-" 2>/dev/null && echo -e "  ${GREEN}[CONFIGURED]${RESET} settings.json (cargo permissions)"
-        ;;
-      go)
-        python3 -c "
+" && echo -e "  ${GREEN}[CONFIGURED]${RESET} settings.json (cargo permissions)"
+          ;;
+        go)
+          python3 -c "
 import json
 with open('.claude/settings.json') as f: s = json.load(f)
 p = s.get('permissions', {}).get('allow', [])
@@ -273,10 +285,10 @@ for c in ['Bash(go:*)', 'Bash(go *)']:
     if c not in p: p.append(c)
 s['permissions']['allow'] = p
 with open('.claude/settings.json', 'w') as f: json.dump(s, f, indent=2); f.write('\n')
-" 2>/dev/null && echo -e "  ${GREEN}[CONFIGURED]${RESET} settings.json (go permissions)"
-        ;;
-      python)
-        python3 -c "
+" && echo -e "  ${GREEN}[CONFIGURED]${RESET} settings.json (go permissions)"
+          ;;
+        python)
+          python3 -c "
 import json
 with open('.claude/settings.json') as f: s = json.load(f)
 p = s.get('permissions', {}).get('allow', [])
@@ -285,19 +297,28 @@ for c in ['Bash(python:*)', 'Bash(python *)', 'Bash(pip:*)', 'Bash(pip *)', 'Bas
 s['permissions']['allow'] = p
 s['worktree'] = {'symlinkDirectories': ['.venv', '__pycache__']}
 with open('.claude/settings.json', 'w') as f: json.dump(s, f, indent=2); f.write('\n')
-" 2>/dev/null && echo -e "  ${GREEN}[CONFIGURED]${RESET} settings.json (python permissions)"
-        ;;
-    esac
+" && echo -e "  ${GREEN}[CONFIGURED]${RESET} settings.json (python permissions)"
+          ;;
+      esac
+    fi
   fi
 
-  # Update primer.md with project name
+  # Update primer.md with project name (quote-safe via env var)
   if [ -f "primer.md" ] && [ -n "$PROJECT_NAME" ]; then
-    python3 -c "
+    if command -v python3 &>/dev/null; then
+      PROJ_NAME="$PROJECT_NAME" python3 -c "
+import os
+name = os.environ['PROJ_NAME']
 content = open('primer.md').read()
 content = content.replace('Project initialized with Claude Code Kickstart template.',
-    'Project \"$PROJECT_NAME\" initialized with Claude Code Kickstart template.')
+    'Project \"' + name + '\" initialized with Claude Code Kickstart template.')
 open('primer.md', 'w').write(content)
 " 2>/dev/null
+    else
+      # Fallback: use sed for simple replacement (no special chars)
+      sed -i.bak "s/Project initialized with Claude Code Kickstart template/Project \"${PROJECT_NAME}\" initialized with Claude Code Kickstart template/" primer.md 2>/dev/null
+      rm -f primer.md.bak 2>/dev/null
+    fi
   fi
 fi
 
@@ -324,3 +345,6 @@ echo "    2. Type /onboard to get oriented"
 echo "    3. Use /fix, /feature, /refactor, /research for task playbooks"
 echo "    4. Type /wrap-up when done to save session state"
 echo ""
+
+# Cleanup temp dir (install.sh's trap doesn't fire after exec)
+[ -d "$TMP_DIR" ] && [[ "$TMP_DIR" == /tmp/* || "$TMP_DIR" == /var/folders/* ]] && rm -rf "$TMP_DIR"
