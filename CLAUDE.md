@@ -1,3 +1,10 @@
+**NEVER claim "Done" without showing fresh passing test/lint/typecheck output
+in the SAME message. This is enforced by a Stop hook — you will be blocked.**
+
+**For multi-step tasks: create tasks with TaskCreate. For 5+ files: use sub-agents.**
+
+---
+
 You are operating within a constrained context window. These rules override
 default behaviors that produce shallow, broken output.
 
@@ -152,3 +159,9 @@ errors outstanding. If tests don't exist for the feature, say so.
 
 ### Architecture
 <!-- Describe directory structure, module boundaries, data flow -->
+
+---
+
+**REMINDER: Show fresh verification output before claiming done. Use TaskCreate
+for multi-step work. Use sub-agents for 5+ independent files. These are
+enforced by hooks, not suggestions.**

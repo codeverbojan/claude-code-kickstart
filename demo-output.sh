@@ -1,0 +1,106 @@
+#!/bin/bash
+# Demo output script — called by demo.tape
+# Usage: ./demo-output.sh <scene-number>
+
+case "$1" in
+  install)
+    echo ""
+    echo "  Claude Code Kickstart"
+    echo "  Production-grade agentic workflow for Claude Code"
+    echo ""
+    echo "  Auto-detected:"
+    echo "    Project:  my-nextjs-app"
+    echo "    Stack:    node"
+    echo "    Package:  pnpm"
+    echo "    Dev:      pnpm dev"
+    echo "    Test:     pnpm test"
+    echo "    Lint:     pnpm lint"
+    echo "    Build:    pnpm build"
+    echo ""
+    echo "  Look right? [Y/n]: Y"
+    echo "  Use Next.js starter config? [Y/n]: Y"
+    echo "  Code conventions? (optional): strict TypeScript, no any"
+    echo ""
+    echo "  [COPY] CLAUDE.md"
+    echo "  [COPY] primer.md, gotchas.md, patterns.md, decisions.md"
+    echo "  [COPY] .claude/ (5 agents, 11 commands, 2 skills)"
+    echo "  [CONFIGURED] CLAUDE.md Section 10 (Next.js starter)"
+    echo "  [CREATED] .npmrc (supply chain guards)"
+    echo ""
+    echo "  Done! Installed in 3s."
+    ;;
+  session-start)
+    echo "Loading project context..."
+    echo ""
+    echo "---PRIMER---"
+    echo "Last session: Fresh install — Next.js + pnpm"
+    echo "Next steps: Start building"
+    echo ""
+    echo "---GOTCHAS---"
+    echo "No rules yet."
+    ;;
+  onboard)
+    echo ""
+    echo "  Session Status"
+    echo "  State: Fresh install — Next.js + pnpm"
+    echo "  Config: Section 10 configured (Next.js starter)"
+    echo "  Gotchas: No rules yet"
+    echo "  Decisions: None logged"
+    echo "  Ready for first task."
+    ;;
+  fix)
+    echo ""
+    echo "  1. Trace"
+    echo "  Root cause: app/auth/login.ts:42"
+    echo "  Form submits without validation — no Zod schema on email field."
+    echo ""
+    echo "  2. Fix"
+    echo "  Added: const schema = z.object({ email: z.string().email() })"
+    echo "  Added: schema.safeParse() before form.submit()"
+    echo ""
+    echo "  3. Verify"
+    echo "  ✓ pnpm typecheck — PASS"
+    echo "  ✓ pnpm lint      — PASS"
+    echo "  ✓ pnpm test      — PASS (14 passed)"
+    echo "  ✓ Added regression test for empty email"
+    echo ""
+    echo "  4. Document"
+    echo "  Added gotcha: always validate form inputs with Zod before submit"
+    ;;
+  wrapup)
+    echo ""
+    echo "  Session saved to primer.md"
+    echo ""
+    echo "  What changed:"
+    echo "    app/auth/login.ts — added Zod email validation"
+    echo "    app/auth/login.test.ts — added empty email test"
+    echo ""
+    echo "  Test status: PASS (15 tests)"
+    echo "  Decision logged: Zod for all form validation"
+    echo "  Uncommitted: 2 files staged"
+    echo "  Next command: /onboard fix signup form validation"
+    ;;
+  resume)
+    echo "Loading project context..."
+    echo ""
+    echo "---SINCE LAST SESSION---"
+    echo "Commits since 2026-04-06 18:30:"
+    echo "a1b2c3d fix: add Zod validation to login form"
+    echo ""
+    echo "  Last session: Fixed login crash — added Zod validation"
+    echo "  Decisions: Zod for all form validation (settled)"
+    echo "  Gotchas: Always validate form inputs with Zod"
+    echo "  Next step: Fix signup form validation"
+    echo ""
+    echo "  Ready to continue."
+    ;;
+  update)
+    echo ""
+    echo "  Updating — preserving CLAUDE.md, primer.md, gotchas.md,"
+    echo "  patterns.md, decisions.md, settings.json"
+    echo ""
+    echo "  [UPDATE] 5 agents, 11 commands, 2 skills"
+    echo ""
+    echo "  Done! Your config untouched."
+    ;;
+esac
