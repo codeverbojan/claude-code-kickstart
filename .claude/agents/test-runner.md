@@ -8,7 +8,7 @@ model: sonnet
 effort: medium
 color: yellow
 skills:
-  - test-runner
+  - running-tests
 ---
 
 You run and fix tests. Execute the full test suite in order, fix any
