@@ -11,6 +11,17 @@
           }
         ]
       }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "prompt",
+            "prompt": "You are a quality gate. Check the assistant's LAST response only. Answer with JSON {\"decision\": \"allow\"} or {\"decision\": \"block\", \"reason\": \"...\"}.\n\nBlock if ANY of these are true:\n1. Functional code was written or modified (not config, comments, or docs) but no test/typecheck/lint output is shown in the response\n2. The assistant claimed 'Done' or 'Complete' without showing passing verification output\n\nAllow if:\n- The response is conversational (no code changes)\n- Only config, comments, docs, or trivial changes were made\n- Verification output is shown and passing\n- The assistant explicitly noted tests aren't configured\n- The assistant is asking a question or presenting a plan\n- This is a research/investigation response\n\nWhen in doubt, allow. Only block for clear verification skips on functional code.",
+            "timeout": 10
+          }
+        ]
+      }
     ]
   },
   "worktree": {
