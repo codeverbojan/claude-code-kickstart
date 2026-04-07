@@ -106,11 +106,15 @@ your-project/
     │   ├── accessibility-reviewer.md
     │   ├── test-runner.md
     │   └── researcher.md
+    ├── hooks/                   <- Signal capture scripts
+    │   └── capture-signal.sh    Async — detects reverts, test failures
     ├── commands/                <- Layer 2: Task playbooks
     │   ├── onboard.md           /onboard [deep] [task]
-    │   ├── wrap-up.md           /wrap-up
+    │   ├── wrap-up.md           /wrap-up (+ metrics + decisions)
     │   ├── init.md              /init (auto-analyze codebase)
-    │   ├── learn.md             /learn (extract patterns into patterns.md)
+    │   ├── learn.md             /learn (extract patterns)
+    │   ├── retrospective.md     /retrospective (auto-generate gotchas)
+    │   ├── metrics.md           /metrics (show improvement trends)
     │   ├── fix.md               /fix <bug description>
     │   ├── feature.md           /feature <feature description>
     │   ├── refactor.md          /refactor <what and why>
@@ -134,6 +138,8 @@ your-project/
 | `/wrap-up` | Structured handoff — saves state + decisions for next session |
 | `/init` | Auto-analyze codebase and generate CLAUDE.md Section 10 config |
 | `/learn` | Extract real code patterns into patterns.md (auto-loaded each session) |
+| `/retrospective` | Analyze captured mistake signals, auto-generate new gotcha rules |
+| `/metrics` | Show per-session stats and improvement trends |
 
 ### Task Playbooks
 | Command | Purpose |
@@ -169,6 +175,33 @@ Three hooks enforce discipline without you having to remind Claude:
 | **SessionStart** | command | Loads primer.md, gotchas.md, patterns.md, decisions.md + shows git commits since last session |
 | **Stop** | prompt | Verification gate — Haiku blocks Claude from claiming "Done" without showing test output |
 | **PreToolUse(Edit\|Write)** | command | Injects reminder to re-read the file before editing (via `additionalContext`) |
+| **PostToolUse(Bash)** | command (async) | Captures mistake signals: git reverts, test/lint/typecheck failures → `.claude/signals.jsonl` |
+
+## Self-Improving System
+
+The template gets smarter over time — without you doing anything:
+
+```
+PostToolUse hook captures signals automatically
+  (git reverts, test failures, lint failures)
+        |
+        v
+.claude/signals.jsonl accumulates mistake data
+  (with failure snippets for root cause analysis)
+        |
+        v
+/retrospective analyzes signals → auto-generates gotcha rules
+  (grouped by type, deduplicated, confidence-scored)
+        |
+        v
+gotchas.md grows with learned rules
+  (auto-loaded every session via hook)
+        |
+        v
+Claude avoids the same category of mistake next time
+```
+
+Run `/retrospective` periodically (weekly or after a rough session). Run `/metrics` to see if mistake rates are decreasing over time.
 
 ## How Session Memory Works
 
@@ -233,9 +266,10 @@ claude plugin install socraticode@socraticode
 5. **Task playbooks** — `/fix`, `/feature`, `/refactor`, `/research` — right behavior instantly.
 6. **Tiered onboarding** — Bare `/onboard` = status. With task = light. With `deep` = full.
 7. **Structured handoffs** — `/wrap-up` produces standard format with decisions and risks.
-8. **Mistake memory** — `gotchas.md` ensures errors never repeat across sessions.
-9. **Hook enforcement** — Stop hook blocks unverified "Done" claims. PreToolUse reminds re-reads.
-10. **Anti-rationalization** — Playbooks explicitly block common excuses for skipping steps.
+8. **Self-improving** — Hooks auto-capture mistakes, `/retrospective` generates gotcha rules, `/metrics` tracks improvement.
+9. **Mistake memory** — `gotchas.md` grows automatically over time, auto-loaded every session.
+10. **Hook enforcement** — Stop hook blocks unverified claims. PostToolUse captures failure signals async.
+11. **Anti-rationalization** — Playbooks explicitly block common excuses for skipping steps.
 11. **Two-stage code review** — Spec compliance first, then code quality.
 12. **Supply chain guards** — `.npmrc` with `ignore-scripts`, 7-day soak period, pinned versions.
 13. **Updatable** — `--update` pulls latest without touching your config.
