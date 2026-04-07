@@ -106,11 +106,13 @@ your-project/
     │   ├── accessibility-reviewer.md
     │   ├── test-runner.md
     │   └── researcher.md
-    ├── hooks/                   <- Signal capture scripts
-    │   └── capture-signal.sh    Async — detects reverts, test failures
-    ├── commands/                <- Layer 2: Task playbooks
+    ├── hooks/                   <- Automated behavior scripts
+    │   ├── capture-signal.sh    Async — detects reverts, test failures
+    │   └── habits-coach.sh      Nudges user toward good practices
+    ├── commands/                <- Layer 2: Task playbooks (14 commands)
     │   ├── onboard.md           /onboard [deep] [task]
     │   ├── wrap-up.md           /wrap-up (+ metrics + decisions)
+    │   ├── reset.md             /reset (wrap-up + clear + deep onboard)
     │   ├── init.md              /init (auto-analyze codebase)
     │   ├── learn.md             /learn (extract patterns)
     │   ├── retrospective.md     /retrospective (auto-generate gotchas)
@@ -135,7 +137,8 @@ your-project/
 | `/onboard` | Status check — read context, report, wait for instructions |
 | `/onboard deep` | Full onboard — explore project, check health, deep report |
 | `/onboard <task>` | Light onboard — focused on a task, start immediately |
-| `/wrap-up` | Structured handoff — saves state + decisions for next session |
+| `/wrap-up` | Structured handoff — saves state + decisions + metrics for next session |
+| `/reset` | Wrap up + clear context + deep onboard in one step (fresh start) |
 | `/init` | Auto-analyze codebase and generate CLAUDE.md Section 10 config |
 | `/learn` | Extract real code patterns into patterns.md (auto-loaded each session) |
 | `/retrospective` | Analyze captured mistake signals, auto-generate new gotcha rules |
@@ -173,6 +176,7 @@ Three hooks enforce discipline without you having to remind Claude:
 | Hook | Type | What it does |
 |------|------|-------------|
 | **SessionStart** | command | Loads primer.md, gotchas.md, patterns.md, decisions.md + shows git commits since last session |
+| **UserPromptSubmit** | command | Habits coach — nudges user toward /onboard, playbooks, /wrap-up (shown to user, not Claude) |
 | **Stop** | prompt | Verification gate — Haiku blocks Claude from claiming "Done" without showing test output |
 | **PreToolUse(Edit\|Write)** | command | Injects reminder to re-read the file before editing (via `additionalContext`) |
 | **PostToolUse(Bash)** | command (async) | Captures mistake signals: git reverts, test/lint/typecheck failures → `.claude/signals.jsonl` |
@@ -269,10 +273,11 @@ claude plugin install socraticode@socraticode
 8. **Self-improving** — Hooks auto-capture mistakes, `/retrospective` generates gotcha rules, `/metrics` tracks improvement.
 9. **Mistake memory** — `gotchas.md` grows automatically over time, auto-loaded every session.
 10. **Hook enforcement** — Stop hook blocks unverified claims. PostToolUse captures failure signals async.
-11. **Anti-rationalization** — Playbooks explicitly block common excuses for skipping steps.
-11. **Two-stage code review** — Spec compliance first, then code quality.
-12. **Supply chain guards** — `.npmrc` with `ignore-scripts`, 7-day soak period, pinned versions.
-13. **Updatable** — `--update` pulls latest without touching your config.
+11. **User coaching** — Habits coach nudges users toward playbooks, onboarding, and wrap-ups.
+12. **Anti-rationalization** — Playbooks explicitly block common excuses for skipping steps.
+13. **Two-stage code review** — Spec compliance first, then code quality.
+14. **Supply chain guards** — `.npmrc` with `ignore-scripts`, 7-day soak period, pinned versions.
+15. **Updatable** — `--update` pulls latest without touching your config.
 
 ## FAQ
 
