@@ -12,10 +12,16 @@ TARGET_DIR="."
 SKIP_WIZARD=false
 UPDATE_MODE=false
 
+# CCK_SRC comes from install.sh (--src=X flag or env var). Also accept --src=X
+# directly when setup.sh is invoked standalone.
+CCK_SRC="${CCK_SRC:-direct}"
+
 for arg in "$@"; do
   case "$arg" in
     --skip-wizard) SKIP_WIZARD=true ;;
     --update) UPDATE_MODE=true; SKIP_WIZARD=true ;;
+    --src=*) CCK_SRC="${arg#--src=}" ;;
+    --*) ;; # unknown flag — ignore instead of treating as target dir
     *) TARGET_DIR="$arg" ;;
   esac
 done
