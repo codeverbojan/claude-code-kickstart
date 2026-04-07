@@ -79,9 +79,15 @@ if printf '%s' "$PROMPT_LOWER" | grep -qE '(clean ?up|refactor|restructure|reorg
 fi
 
 # --- Check 4: First message without onboarding ---
-# Fire for both new users (no primer.md yet) and returning users who skip /onboard
-if printf '%s' "$PROMPT_LOWER" | grep -qE '^(fix|build|add|create|implement|make|update|change|refactor|delete|remove)'; then
-  if [ ! -f "$TIPS_SHOWN" ] || [ ! -s "$TIPS_SHOWN" ]; then
+# Fire on greetings, short messages, or action words — anything that isn't a slash command
+# and comes before any tips have been shown (i.e. first message of the session)
+if [ ! -f "$TIPS_SHOWN" ] || [ ! -s "$TIPS_SHOWN" ]; then
+  # Greetings and short openers
+  if printf '%s' "$PROMPT_LOWER" | grep -qE '^(hey|hi|hello|sup|yo|whats up|good morning|morning|hola|start)$'; then
+    show_tip "onboard" "Tip: Try /onboard to load project context, or /onboard <task> to jump into specific work."
+  fi
+  # Action words without a playbook
+  if printf '%s' "$PROMPT_LOWER" | grep -qE '^(fix|build|add|create|implement|make|update|change|refactor|delete|remove)'; then
     show_tip "onboard" "Tip: Start with /onboard to load project context before jumping into work."
   fi
 fi
