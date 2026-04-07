@@ -16,6 +16,7 @@
 | `/init` | Auto-analyze codebase and generate CLAUDE.md Section 10 config |
 | `/learn` | Extract real code patterns into patterns.md (auto-loaded each session) |
 | `/retrospective` | Analyze mistake signals and auto-generate gotcha rules |
+| `/metrics` | Show session stats and improvement trends |
 | `/test` | Run full test suite |
 | `/lint` | Run type-checker + linter + formatter |
 

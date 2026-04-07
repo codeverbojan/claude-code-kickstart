@@ -81,7 +81,31 @@ would be re-litigated if someone didn't know the reasoning:
 ## 4. Update gotchas.md (if needed)
 If any mistakes were made this session, append a numbered rule.
 
-## 5. Report to user
+## 5. Append session metrics
+
+Append one JSON line to `.claude/metrics.jsonl` with this session's stats:
+
+```json
+{
+  "date": "YYYY-MM-DD",
+  "files_touched": 0,
+  "verification_runs": 0,
+  "gotchas_added": 0,
+  "signals_captured": 0,
+  "decisions_logged": 0
+}
+```
+
+Get counts from deterministic sources (not from memory — compaction loses history):
+- `files_touched`: run `git diff --name-only | wc -l` (or `git diff --cached --name-only | wc -l`)
+- `verification_runs`: best-effort count from this conversation (may undercount after compaction)
+- `gotchas_added`: count new rules you added to gotchas.md (0 if none)
+- `signals_captured`: run `grep -c "$(date -u +%Y-%m-%d)" .claude/signals.jsonl 2>/dev/null || echo 0`
+- `decisions_logged`: count decisions you appended to decisions.md (0 if none)
+
+Write the JSON line with a Bash command: `echo '{"date":"...","files_touched":N,...}' >> .claude/metrics.jsonl`
+
+## 6. Report to user
 - One-paragraph summary of the session
 - Any uncommitted changes needing attention
 - Any failing checks
