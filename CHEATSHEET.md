@@ -8,6 +8,7 @@
 | `/onboard deep` | Full onboard — explore project, check health, deep report |
 | `/onboard <task>` | Light onboard — focused on a specific task, start immediately |
 | `/wrap-up` | End session — structured handoff to primer.md |
+| `/reset` | Wrap up + clear context + deep onboard (fresh start) |
 | `/fix <description>` | Bug fix playbook |
 | `/feature <description>` | New feature playbook |
 | `/refactor <description>` | Refactor playbook |
