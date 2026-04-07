@@ -47,6 +47,94 @@ copy_safe() {
   echo -e "  ${GREEN}[COPY]${RESET} $dst"
 }
 
+# ─── Response-style wizard prompt ───
+# Asks the user how verbose Claude should be. Fewer tokens = cheaper sessions
+# but less explanation. More tokens = more context but higher cost per turn.
+prompt_response_style() {
+  echo ""
+  echo -e "  ${BOLD}How should Claude respond?${RESET} ${DIM}(affects token cost per session)${RESET}"
+  echo -e "    1) ${BOLD}Concise${RESET}  — short answers, minimal preamble. ${DIM}Least tokens.${RESET}"
+  echo -e "    2) ${BOLD}Balanced${RESET} — short but complete explanations. ${DIM}Middle ground.${RESET}"
+  echo -e "    3) ${BOLD}Verbose${RESET}  — detailed reasoning, trade-offs, examples. ${DIM}Most tokens.${RESET}"
+  echo -e "    4) ${BOLD}Beginner${RESET} — plain language, no jargon. ${DIM}Explains like to a smart 15-year-old.${RESET}"
+  printf "  Choice [${BOLD}2${RESET}]: "
+  read -r STYLE_CHOICE
+  case "${STYLE_CHOICE:-2}" in
+    1) RESPONSE_STYLE="concise" ;;
+    3) RESPONSE_STYLE="verbose" ;;
+    4) RESPONSE_STYLE="beginner" ;;
+    *) RESPONSE_STYLE="balanced" ;;
+  esac
+}
+
+# ─── Build the response-style block injected into CLAUDE.md Section 10 ───
+build_response_style_block() {
+  case "$RESPONSE_STYLE" in
+    concise)
+      cat <<'STYLE_EOF'
+
+### Response Style: Concise
+
+- One-sentence answers where possible. Lead with the answer, never preamble.
+- No trailing summaries of what you just did — the diff speaks for itself.
+- No tables, no headers, no bullet lists unless the user explicitly asks for one.
+- Code tasks: return the code with a one-line explanation only if non-obvious.
+- Verification output still required per CLAUDE.md §4 (non-negotiable).
+STYLE_EOF
+      ;;
+    verbose)
+      cat <<'STYLE_EOF'
+
+### Response Style: Verbose
+
+- Explain your reasoning and trade-offs before the answer when decisions are non-trivial.
+- Include concrete examples, alternatives considered, and why you ruled them out.
+- Flag edge cases and assumptions the user should verify.
+- Tables and structured formatting are welcome when they aid comprehension.
+- Still obey CLAUDE.md §6 (no over-engineering) — verbose in *explanation*, not in code.
+STYLE_EOF
+      ;;
+    beginner)
+      cat <<'STYLE_EOF'
+
+### Response Style: Beginner (plain language)
+
+The user is not a professional developer. Explain everything as if you were
+talking to a smart 15-year-old who is curious but doesn't know the jargon.
+
+- **No jargon without defining it.** The first time you use a technical term
+  (e.g. "dependency", "linter", "migration", "API", "env var"), explain what
+  it means in one short sentence, then use it normally after.
+- **Use analogies.** "Think of a dependency like a lego brick your project
+  borrows from someone else." Analogies beat definitions for first-time learners.
+- **Explain the *why* before the *how*.** Don't just say "run this command" —
+  say what the command does and why it's the next step.
+- **Warn before anything scary.** Before a command that deletes, overwrites,
+  or pushes to the internet, say in plain words what it's about to do and ask
+  for confirmation.
+- **Celebrate small wins.** When something works, say so clearly: "Great — that
+  worked. Now we can..." — momentum matters for non-technical users.
+- **No sarcasm, no "obviously", no "just".** Those words make beginners feel dumb.
+- **If the user asks a "stupid" question, treat it as a real one.** There are no
+  stupid questions — only missing context.
+- Still obey CLAUDE.md §4 verification — but explain the test output in plain words
+  ("all 12 checks passed — your code looks healthy") instead of dumping raw logs.
+STYLE_EOF
+      ;;
+    *)
+      cat <<'STYLE_EOF'
+
+### Response Style: Balanced
+
+- Lead with the answer or action. Include only what's needed for the user to understand it.
+- Short but complete: explain *why* for non-obvious decisions, skip the obvious.
+- Use structure (bullets, short tables) only when it genuinely aids scanning.
+- No trailing "here's what I did" summaries — only call out decisions or blockers.
+STYLE_EOF
+      ;;
+  esac
+}
+
 # ─── Read a JSON key from package.json (no jq dependency) ───
 pkg_script() {
   local key="$1"
@@ -73,6 +161,7 @@ CMD_LINT=""
 CMD_TEST=""
 CMD_BUILD=""
 CONVENTIONS=""
+RESPONSE_STYLE="balanced"  # concise | balanced | verbose
 DETECTED=false
 
 # Detect stack from project files
@@ -243,6 +332,8 @@ if [ "$DETECTED" = true ] && [ "$SKIP_WIZARD" = false ]; then
     # Ask for conventions (only thing we can't auto-detect)
     printf "  Code conventions to enforce? (optional): "
     read -r CONVENTIONS
+
+    prompt_response_style
     echo ""
   fi
 fi
@@ -359,6 +450,9 @@ if [ "$DETECTED" = false ] && [ "$SKIP_WIZARD" = false ]; then
   echo ""
   printf "  Code conventions to enforce? (e.g. 'strict TypeScript, no any'): "
   read -r CONVENTIONS
+
+  # 5. Response style
+  prompt_response_style
 
   echo ""
   echo -e "  ${GREEN}Got it.${RESET} Installing..."
@@ -498,6 +592,12 @@ if [ "$UPDATE_MODE" != true ] && { [ -n "$CMD_DEV" ] || [ -n "$CMD_TEST" ] || [ 
 
   CONFIG_SECTION="$CONFIG_SECTION\n### Architecture\n<!-- Describe directory structure, module boundaries, data flow -->"
   fi  # end of else (non-starter config)
+
+  # Append response-style block (works for both starter and auto-gen paths —
+  # real newlines are tolerated by both echo -e and printf '%s\n')
+  STYLE_BLOCK=$(build_response_style_block)
+  CONFIG_SECTION="${CONFIG_SECTION}
+${STYLE_BLOCK}"
 
   # Replace Section 10 in CLAUDE.md — only if it still has the default placeholder
   if [ -f "CLAUDE.md" ]; then
