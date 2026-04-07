@@ -4,6 +4,42 @@ Production-grade agentic workflow template for [Claude Code](https://docs.anthro
 
 ![Demo](demo.gif)
 
+**One-line install:**
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/codeverbojan/claude-code-kickstart/main/install.sh)
+```
+
+> 📖 **Read the story:** [I Built a Self-Improving Workflow for Claude Code](https://bojanjosifoski.com/i-built-a-self-improving-workflow-for-claude-code/) — the why, the four layers, and the self-improving loop that makes this different from every other CLAUDE.md template.
+
+## The self-improving loop
+
+This is what makes Kickstart different. Every other template is static. This one learns from its own mistakes:
+
+```
+  Mistake happens                           ┐
+         │                                   │
+         ▼                                   │
+  PostToolUse hook captures the signal       │
+  (git reverts, test/lint failures)          │
+         │                                   │  Auto-loop.
+         ▼                                   │  You do
+  /retrospective groups signals →            │  nothing.
+  appends new rules to gotchas.md            │
+         │                                   │
+         ▼                                   │
+  SessionStart hook auto-loads gotchas       │
+  at every new session                       │
+         │                                   │
+         ▼                                   │
+  Claude avoids the same category of bug    ┘
+         │
+         ▼
+  /metrics shows mistake rate trending down over time
+```
+
+Five hooks enforce it. `SessionStart` loads memory. `UserPromptSubmit` coaches habits. `Stop` blocks unverified "Done" claims. `PreToolUse` forces file re-reads before edits. `PostToolUse` captures mistake signals asynchronously. See [`.claude/settings.json`](.claude/settings.json) for the wiring.
+
 ## Prerequisites
 
 - [Claude Code](https://docs.anthropic.com/en/docs/claude-code) installed:
@@ -35,6 +71,17 @@ bash <(curl -fsSL https://raw.githubusercontent.com/codeverbojan/claude-code-kic
 ```
 
 **Windows:** Use WSL or Git Bash to run the installer.
+
+**Track distribution channel** (for maintainers sharing the install link across platforms):
+
+```bash
+# Tag the install source — recorded to .claude/install-source.txt in the target project
+CCK_SRC=twitter bash <(curl -fsSL https://raw.githubusercontent.com/codeverbojan/claude-code-kickstart/main/install.sh)
+# or as a flag:
+bash <(curl -fsSL https://raw.githubusercontent.com/codeverbojan/claude-code-kickstart/main/install.sh) --src=linkedin
+```
+
+Share one unique snippet per channel (Twitter, LinkedIn, blog post, Discord, etc.) and each installed project will carry its origin in `.claude/install-source.txt`.
 
 Never overwrites existing files on fresh install. Safe on any project.
 

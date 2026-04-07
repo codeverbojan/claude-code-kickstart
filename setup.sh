@@ -609,6 +609,16 @@ open('primer.md', 'w').write(content)
   fi
 fi
 
+# ─── Record install source ───
+# CCK_SRC is exported by install.sh (from --src=X flag or env var, defaults to "direct")
+if [ -d ".claude" ]; then
+  {
+    echo "source: ${CCK_SRC:-direct}"
+    echo "installed_at: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    echo "mode: $([ "$UPDATE_MODE" = true ] && echo update || echo fresh)"
+  } > .claude/install-source.txt
+fi
+
 # ─── Summary ───
 
 echo ""
@@ -631,6 +641,9 @@ echo "    1. Run 'claude' to start a session"
 echo "    2. Type /onboard to get oriented"
 echo "    3. Use /fix, /feature, /refactor, /research for task playbooks"
 echo "    4. Type /wrap-up when done to save session state"
+echo ""
+echo -e "  ${YELLOW}★${RESET} ${BOLD}If this saves you time, star the repo:${RESET}"
+echo -e "    ${CYAN}https://github.com/codeverbojan/claude-code-kickstart${RESET}"
 echo ""
 
 # Cleanup temp dir (install.sh's trap doesn't fire after exec)
