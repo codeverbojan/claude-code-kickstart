@@ -20,6 +20,7 @@
 | `/metrics` | Show session stats and improvement trends |
 | `/test` | Run full test suite |
 | `/lint` | Run type-checker + linter + formatter |
+| `/security-review` | Audit diff vs `origin/HEAD` (preflights git state) |
 
 ## Agents
 

@@ -123,7 +123,8 @@ your-project/
     │   ├── api-route.md         /api-route <endpoint>
     │   ├── research.md          /research <question>
     │   ├── test.md              /test
-    │   └── lint.md              /lint
+    │   ├── lint.md              /lint
+    │   └── security-review.md   /security-review (preflight + diff audit)
     └── skills/                  <- Layer 3: Domain knowledge
         ├── securing-code/
         └── running-tests/
@@ -158,6 +159,7 @@ your-project/
 |---------|---------|
 | `/test` | Run full test suite |
 | `/lint` | Run type-checker + linter + formatter |
+| `/security-review` | Audit diff vs `origin/HEAD` — pre-flights git state with actionable errors |
 
 ## Sub-Agents
 
