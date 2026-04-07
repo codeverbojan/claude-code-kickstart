@@ -54,3 +54,7 @@ Gemfile.lock
 .env
 .env.*
 .DS_Store
+
+# Signal/metrics logs (machine-generated, not useful for context)
+.claude/signals.jsonl
+.claude/metrics.jsonl
