@@ -15,6 +15,7 @@
 | `/research <question>` | Research-only playbook (no code) |
 | `/init` | Auto-analyze codebase and generate CLAUDE.md Section 10 config |
 | `/learn` | Extract real code patterns into patterns.md (auto-loaded each session) |
+| `/retrospective` | Analyze mistake signals and auto-generate gotcha rules |
 | `/test` | Run full test suite |
 | `/lint` | Run type-checker + linter + formatter |
 

@@ -67,12 +67,22 @@ if signal_type:
     safe_command = re.sub(r'(password[=:]\s*)\S+', r'\1[REDACTED]', safe_command, flags=re.IGNORECASE)
     safe_command = re.sub(r'(sk-|ghp_|gho_|glpat-|xoxb-)\S+', '[REDACTED]', safe_command)
 
+    # Capture output snippet for failure signals (helps /retrospective identify root cause)
+    snippet = ''
+    if signal_type in ('test_failure', 'lint_failure', 'typecheck_failure'):
+        snippet = response_text[:500]
+        # Scrub secrets from snippet too
+        snippet = re.sub(r'(Bearer\s+)\S+', r'\1[REDACTED]', snippet)
+        snippet = re.sub(r'(sk-|ghp_|gho_|glpat-|xoxb-)\S+', '[REDACTED]', snippet)
+
     entry = {
         'timestamp': datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
         'type': signal_type,
         'detail': signal_detail,
         'command': safe_command
     }
+    if snippet:
+        entry['snippet'] = snippet
 
     # Cap file size at 100KB — keep last 200 lines if exceeded
     try:
