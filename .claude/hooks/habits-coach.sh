@@ -78,12 +78,13 @@ if printf '%s' "$PROMPT_LOWER" | grep -qE '(clean ?up|refactor|restructure|reorg
   show_tip "playbook_refactor" "Tip: Use /refactor <description> — deletes dead code first, then restructures."
 fi
 
-# --- Check 4: First message without onboarding ---
-# Fire on greetings, short messages, or action words — anything that isn't a slash command
-# and comes before any tips have been shown (i.e. first message of the session).
+# --- Check 4: First message guidance ---
+# Fire on greetings or action words — anything that isn't a slash command
+# and comes before any tips have been shown (first message of the session).
 #
-# Skip entirely on fresh installs: if primer.md is still the template stub,
-# there's nothing for /onboard to load and the nudge is actively misleading.
+# Tip content depends on whether this is a fresh install. On fresh installs
+# (primer.md still the template stub) /onboard has nothing to load, so we
+# point the user at playbooks and task description instead.
 IS_FRESH_INSTALL=0
 # Match the fresh-install stub with either em-dash (U+2014) or plain hyphen,
 # so a normalised primer.md (Windows editor, web paste) still trips the gate.
@@ -91,14 +92,22 @@ if [ -f "$PROJECT_DIR/primer.md" ] && grep -qE 'Fresh install (—|-) no previou
   IS_FRESH_INSTALL=1
 fi
 
-if [ "$IS_FRESH_INSTALL" = "0" ] && { [ ! -f "$TIPS_SHOWN" ] || [ ! -s "$TIPS_SHOWN" ]; }; then
+if [ ! -f "$TIPS_SHOWN" ] || [ ! -s "$TIPS_SHOWN" ]; then
   # Greetings and short openers
   if printf '%s' "$PROMPT_LOWER" | grep -qE '^(hey|hi|hello|sup|yo|whats up|good morning|morning|hola|start)$'; then
-    show_tip "onboard" "Tip: Try /onboard to load project context, or /onboard <task> to jump into specific work."
+    if [ "$IS_FRESH_INSTALL" = "1" ]; then
+      show_tip "welcome" "Tip: Fresh install — just describe what you want to build. Use /fix, /feature, /refactor, or /research for structured playbooks."
+    else
+      show_tip "onboard" "Tip: Try /onboard to load project context, or /onboard <task> to jump into specific work."
+    fi
   fi
   # Action words without a playbook
   if printf '%s' "$PROMPT_LOWER" | grep -qE '^(fix|build|add|create|implement|make|update|change|refactor|delete|remove)'; then
-    show_tip "onboard" "Tip: Start with /onboard to load project context before jumping into work."
+    if [ "$IS_FRESH_INSTALL" = "1" ]; then
+      show_tip "welcome" "Tip: Fresh install — use /fix, /feature, /refactor, or /research for structured playbooks with built-in review."
+    else
+      show_tip "onboard" "Tip: Start with /onboard to load project context before jumping into work."
+    fi
   fi
 fi
 
