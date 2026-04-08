@@ -80,8 +80,18 @@ fi
 
 # --- Check 4: First message without onboarding ---
 # Fire on greetings, short messages, or action words — anything that isn't a slash command
-# and comes before any tips have been shown (i.e. first message of the session)
-if [ ! -f "$TIPS_SHOWN" ] || [ ! -s "$TIPS_SHOWN" ]; then
+# and comes before any tips have been shown (i.e. first message of the session).
+#
+# Skip entirely on fresh installs: if primer.md is still the template stub,
+# there's nothing for /onboard to load and the nudge is actively misleading.
+IS_FRESH_INSTALL=0
+# Match the fresh-install stub with either em-dash (U+2014) or plain hyphen,
+# so a normalised primer.md (Windows editor, web paste) still trips the gate.
+if [ -f "$PROJECT_DIR/primer.md" ] && grep -qE 'Fresh install (—|-) no previous sessions' "$PROJECT_DIR/primer.md" 2>/dev/null; then
+  IS_FRESH_INSTALL=1
+fi
+
+if [ "$IS_FRESH_INSTALL" = "0" ] && { [ ! -f "$TIPS_SHOWN" ] || [ ! -s "$TIPS_SHOWN" ]; }; then
   # Greetings and short openers
   if printf '%s' "$PROMPT_LOWER" | grep -qE '^(hey|hi|hello|sup|yo|whats up|good morning|morning|hola|start)$'; then
     show_tip "onboard" "Tip: Try /onboard to load project context, or /onboard <task> to jump into specific work."

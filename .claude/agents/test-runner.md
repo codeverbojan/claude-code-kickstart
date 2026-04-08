@@ -4,8 +4,8 @@ description: >
   Runs the project test suite and fixes failures. Use after code changes,
   before commits, and when verifying fixes.
 tools: Read, Edit, Bash, Grep, Glob
-model: sonnet
-effort: medium
+model: haiku
+effort: low
 color: yellow
 skills:
   - running-tests

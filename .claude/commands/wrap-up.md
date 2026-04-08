@@ -6,108 +6,80 @@ description: End-of-session — structured handoff to primer.md
 # Session Wrap-Up
 
 ## 1. Verify
-- Run type-checker if any code changed
-- Run linter if any code changed
-- Run tests if any logic changed
-- Note pass/fail status
+Run typecheck/lint/tests if any code changed. Note pass/fail. Skip if nothing
+was touched.
 
 ## 2. Rewrite primer.md
 
-Completely replace `primer.md` with this exact structure:
+Overwrite `primer.md` with exactly this structure (replace bracketed hints):
 
 ```markdown
 # Session Primer
 
 ## Last Session
-[Date or "today"]: [1-2 sentence summary of what was done]
+[date]: [1–2 sentence summary]
 
 ## What Changed
-- [file]: [what changed and why]
-- [file]: [what changed and why]
+- [file]: [why]
 
 ## Current State
-[What works, what doesn't, what's partially done]
+[what works, what doesn't, what's partial]
 
 ## Uncommitted Changes
-- [List any staged/unstaged changes, or "None — all committed"]
+[list, or "None"]
 
 ## Test Status
-- Type-check: PASS/FAIL/NOT CONFIGURED
-- Lint: PASS/FAIL/NOT CONFIGURED
-- Tests: PASS/FAIL/NOT CONFIGURED (X passed, Y failed)
+- Type-check: PASS | FAIL | NOT CONFIGURED
+- Lint: PASS | FAIL | NOT CONFIGURED
+- Tests: PASS | FAIL | NOT CONFIGURED (X passed, Y failed)
 
 ## Decisions Made
-- [Any choices between alternatives and why, or "None"]
+[bullets, or "None"]
 
 ## Risks
-- [Anything fragile, incomplete, or needing attention]
+[fragile or incomplete bits]
 
 ## Next Steps
-1. [Specific, actionable next step]
-2. [Specific, actionable next step]
-3. [Specific, actionable next step]
+1. [actionable]
+2. [actionable]
 
 ## Next Recommended Command
-[The exact slash command to run next session, e.g. "/onboard deep finish the auth system"]
+[exact slash command, e.g. `/onboard deep finish auth`]
 
 ## Key Files
-- [Files the next session should read first]
+- [files next session should read first]
 ```
 
-## 3. Update decisions.md (if decisions were made)
+## 3. Append to decisions.md (only if real decisions were made)
 
-If any technical decisions, architecture choices, or tradeoff judgments were
-made this session, APPEND them to `decisions.md`. Never overwrite existing entries.
+Append new entries — never overwrite. Skip trivial choices (naming, formatting).
+Log choices that would be re-litigated without context: tech picks, architecture,
+pattern decisions, scope cuts. Skip if a matching title already exists.
 
-Format for each new decision:
+Format:
 ```markdown
-## [Date]: [Short title]
-**Choice:** [What was decided]
-**Why:** [The reasoning — constraints, tradeoffs, alternatives rejected]
-**Context:** [What prompted this decision]
+## [date]: [title]
+**Choice:** …
+**Why:** …
+**Context:** …
 ```
 
-Before appending, check if a decision with the same title already exists in
-decisions.md. If it does, skip it (don't create duplicates).
+## 4. Append to gotchas.md (only if mistakes happened)
+Numbered rule per mistake. Skip if none.
 
-Only log decisions that a future session would need to know about.
-Don't log trivial choices (variable names, formatting). Log choices that
-would be re-litigated if someone didn't know the reasoning:
-- Technology/library choices
-- Architecture decisions
-- Pattern decisions (why X approach over Y)
-- Scope decisions (why something was deferred or cut)
+## 5. Append metrics line
 
-## 4. Update gotchas.md (if needed)
-If any mistakes were made this session, append a numbered rule.
-
-## 5. Append session metrics
-
-Append one JSON line to `.claude/metrics.jsonl` with this session's stats:
-
-```json
-{
-  "date": "YYYY-MM-DD",
-  "files_touched": 0,
-  "verification_runs": 0,
-  "gotchas_added": 0,
-  "signals_captured": 0,
-  "decisions_logged": 0
-}
+```bash
+echo '{"date":"YYYY-MM-DD","files_touched":N,"verification_runs":N,"gotchas_added":N,"signals_captured":N,"decisions_logged":N}' >> .claude/metrics.jsonl
 ```
 
-Get counts from deterministic sources (not from memory — compaction loses history):
-- `files_touched`: run `git diff --name-only | wc -l` (or `git diff --cached --name-only | wc -l`)
-- `verification_runs`: best-effort count from this conversation (may undercount after compaction)
-- `gotchas_added`: count new rules you added to gotchas.md (0 if none)
-- `signals_captured`: run `grep -c "$(date -u +%Y-%m-%d)" .claude/signals.jsonl 2>/dev/null || echo 0`
-- `decisions_logged`: count decisions you appended to decisions.md (0 if none)
+Counts (deterministic — don't guess from memory):
+- `files_touched`: `git diff --name-only | wc -l`
+- `signals_captured`: `grep -c "$(date -u +%Y-%m-%d)" .claude/signals.jsonl 2>/dev/null || echo 0`
+- Others: count what you actually added this session.
 
-Write the JSON line with a Bash command: `echo '{"date":"...","files_touched":N,...}' >> .claude/metrics.jsonl`
-
-## 6. Report to user
-- One-paragraph summary of the session
-- Any uncommitted changes needing attention
-- Any failing checks
+## 6. Report
+One paragraph: what shipped, uncommitted changes, failing checks. No epic
+summary — the user will read primer.md.
 
 $ARGUMENTS

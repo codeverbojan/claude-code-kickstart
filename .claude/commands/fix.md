@@ -5,32 +5,52 @@ description: Bug fix playbook — trace, fix, verify, document
 
 # Bug Fix Playbook
 
-**Iron rule: NO FIXES WITHOUT ROOT CAUSE INVESTIGATION FIRST.**
-Thinking "I see the problem, let me just fix it quick"? Stop. That's
-how you fix a symptom and miss the real bug. Trace first, always.
+Fix the root cause, not the symptom. Trace first, always — otherwise you'll
+fix the wrong thing and the real bug will come back.
+
+This playbook runs under CLAUDE.md §4 Execution Loop: one fix, tests in the
+same turn, parallel review before closing.
 
 ## 1. Trace
-- Read the error output / bug report. Work from raw data, not theories.
-- Reproduce the issue. If you can't reproduce, ask for steps / logs.
-- Identify the root cause file(s). Grep for relevant symbols.
-- State the root cause in one sentence before touching anything.
+- Read the raw error output / bug report. Work from data, not theories.
+- Reproduce the issue. If you can't, ask for steps or logs before guessing.
+- Identify the root-cause file(s). Grep for relevant symbols; for non-trivial
+  traces, prefer SocratiCode (`codebase_search`, `codebase_graph_query`).
+- State the root cause in one sentence. Write it down — review agents will
+  check against it.
 
 ## 2. Scope
 - Name the exact file(s) you will edit. No others.
 - State the fix in one sentence before touching code.
-
-## 3. Fix
-- Fix the root cause, not the symptom.
 - If the fix touches >3 files, pause and confirm scope with the user.
 
-## 4. Verify
-- Run type-checker
-- Run linter
-- Run tests (especially tests related to the bug)
-- If no test covers this bug, write one that would have caught it.
-- Show passing output. "I already ran them" is not evidence.
+## 3. Fix + test
+- Fix the root cause.
+- Write a regression test in the same turn — one that would have caught this
+  bug. If the project has no test infra, state so explicitly.
+- Update related tests if behavior legitimately changed.
 
-## 5. Document
-- If the bug was caused by a non-obvious pattern, add a rule to `gotchas.md`.
+## 4. Checkpoint review (parallel)
+Spawn in a single message:
+- `code-reviewer` — did the fix address the stated root cause?
+- `test-runner` — full suite passes, regression test actually covers the bug.
+- `security-reviewer` — if the bug touched auth, inputs, DB, or APIs.
+- `accessibility-reviewer` — if the bug is in a UI component.
+
+Give every reviewer the root-cause sentence from step 1 + the files touched.
+Fix all valid findings before reporting done.
+
+## 5. Report (use the §4 format)
+```
+Task: <one-line bug description>
+Implementation: <root cause + fix in 1-2 lines>
+Tests: <regression test added, suite pass/fail>
+Review findings: <bullets, or "clean">
+Fixes: <response to findings, or "none">
+Status: <complete | blocked: reason>
+```
+
+## 6. Document
+If the bug came from a non-obvious pattern, append a rule to `gotchas.md`.
 
 $ARGUMENTS

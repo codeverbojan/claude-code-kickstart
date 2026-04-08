@@ -1,12 +1,13 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "model": "opusplan",
   "hooks": {
     "SessionStart": [
       {
         "hooks": [
           {
             "type": "command",
-            "command": "(cat primer.md 2>/dev/null; printf '\\n---GOTCHAS---\\n'; cat gotchas.md 2>/dev/null; printf '\\n---PATTERNS---\\n'; cat patterns.md 2>/dev/null; printf '\\n---DECISIONS---\\n'; cat decisions.md 2>/dev/null; if git rev-parse --git-dir >/dev/null 2>&1 && [ -f primer.md ]; then MTIME=$(stat -f%m primer.md 2>/dev/null || stat -c%Y primer.md 2>/dev/null); if [ -n \"$MTIME\" ]; then SINCE=$(date -r \"$MTIME\" '+%Y-%m-%d %H:%M' 2>/dev/null || date -d \"@$MTIME\" '+%Y-%m-%d %H:%M' 2>/dev/null); ALL=$(git log --oneline --since=\"$MTIME\" 2>/dev/null); if [ -n \"$ALL\" ]; then COUNT=$(printf '%s\\n' \"$ALL\" | wc -l | tr -d ' '); SHOWN=$(printf '%s\\n' \"$ALL\" | head -15); printf '\\n---SINCE LAST SESSION---\\n'; printf 'Commits since %s:\\n%s\\n' \"$SINCE\" \"$SHOWN\"; if [ \"$COUNT\" -gt 15 ]; then printf '... and %d more commits\\n' \"$((COUNT - 15))\"; fi; fi; fi; fi) 2>/dev/null || true",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/session-primer.sh",
             "statusMessage": "Loading project context..."
           }
         ]
@@ -27,9 +28,9 @@
       {
         "hooks": [
           {
-            "type": "prompt",
-            "prompt": "You are a quality gate. Check the assistant's LAST response only. Answer with JSON {\"ok\": true} or {\"ok\": false, \"reason\": \"...\"}.\n\nReturn {\"ok\": false} if ANY of these are true:\n1. Functional code was written or modified (not config, comments, or docs) but no test/typecheck/lint output is shown in the response\n2. The assistant claimed 'Done' or 'Complete' without showing passing verification output\n\nReturn {\"ok\": true} if:\n- The response is conversational (no code changes)\n- Only config, comments, docs, or trivial changes were made\n- Verification output is shown and passing\n- The assistant explicitly noted tests aren't configured\n- The assistant is asking a question or presenting a plan\n- This is a research/investigation response\n\nWhen in doubt, return {\"ok\": true}. Only block for clear verification skips on functional code.",
-            "timeout": 10
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/verify-gate.sh",
+            "timeout": 5
           }
         ]
       }

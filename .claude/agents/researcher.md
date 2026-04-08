@@ -5,8 +5,8 @@ description: >
   and best practices. Use for any investigation that needs web search
   or deep codebase exploration.
 tools: Read, Grep, Glob, Bash, WebSearch, WebFetch
-model: sonnet
-effort: medium
+model: haiku
+effort: low
 color: cyan
 ---
 

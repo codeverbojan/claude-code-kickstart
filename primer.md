@@ -29,7 +29,10 @@ None.
 3. Start building
 
 ## Next Recommended Command
-`/onboard deep`
+Just describe what you want to build. On a fresh install there's no context
+to load — skip `/onboard` until you have some session history. Use
+`/onboard deep` only once you've done real work and `primer.md`/`gotchas.md`
+have content worth loading.
 
 ## Key Files
 - `CLAUDE.md` — operating rules (customize Section 10)

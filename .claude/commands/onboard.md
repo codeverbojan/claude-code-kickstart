@@ -5,57 +5,44 @@ description: Session onboarding — light by default, add "deep" for full contex
 
 # Session Onboard
 
-Determine the mode based on `$ARGUMENTS`:
+`primer.md` is auto-loaded by the SessionStart hook, so skip anything that
+just re-reads it. Mode is determined by `$ARGUMENTS`.
 
-## If "deep" is in the arguments → DEEP MODE
+## DEEP MODE — if `$ARGUMENTS` contains "deep"
 
-Full context load for major work:
+Full context load for major work. Read in this order, skipping any file that
+contains a placeholder stub (`No gotchas yet`, `No patterns extracted yet`,
+`No decisions logged yet`) — those have no signal:
 
-1. Read `primer.md` — current state, next steps, blockers
-2. Read `gotchas.md` — all rules learned from past mistakes
-3. Read `patterns.md` — how this project does things (if populated)
-4. Read `decisions.md` — why past decisions were made (don't re-litigate these)
-5. Explore project structure — key directories, config files, entry points
-6. Check `git status` for uncommitted changes
-7. Run type-checker/linter if configured, report health
-8. Read any architecture docs if they exist (docs/, ARCHITECTURE.md, etc.)
-9. Report back:
-   - Where are we? (current state, what's done, what's not)
-   - Project structure overview
-   - Uncommitted changes or dirty state
-   - Test/lint health
-   - Exact next steps from primer.md
-   - Any blockers or risks
-   - What should be clarified before starting?
+1. `gotchas.md`, `patterns.md`, `decisions.md` (non-stub only)
+2. Project structure: key directories, entry points, top-level config
+3. Architecture docs if present (`docs/`, `ARCHITECTURE.md`, `README.md`)
+4. `git status` for uncommitted state
+5. Typecheck/lint if configured — otherwise skip silently
 
-If a task was given alongside "deep", also report how the task fits into
-the current project state and which files you'll need.
+Report in under 15 lines:
+- Current state (from primer.md)
+- Project structure (one line)
+- Uncommitted changes
+- Test/lint health or "not configured"
+- Next steps from primer.md
+- Blockers or clarifications needed
 
-## If a specific task is given (no "deep") → LIGHT MODE
+If a task was given alongside "deep", also name the 1–3 files you'll need
+and how the task fits the current state.
 
-Fast onboard for focused work:
+## LIGHT MODE — if a task is given (no "deep")
 
-1. Read `primer.md` — current state, next steps
-2. Read `gotchas.md` — rules to follow
-3. Identify the 1-3 files most relevant to the task
-4. Report in 3-5 lines:
-   - Current state (one line)
-   - What you'll work on
-   - Which files you'll touch
-   - Any blockers
-5. Start working immediately.
+Fast onboard for focused work.
 
-## If no arguments → STATUS MODE
+1. Identify the 1–3 files most relevant to `$ARGUMENTS`
+2. Report in 3–5 lines: current state, what you'll work on, files you'll
+   touch, any blocker
+3. Start working immediately.
 
-Quick status check:
+## STATUS MODE — no arguments
 
-1. Read `primer.md`
-2. Read `gotchas.md`
-3. Check `git status`
-4. Report:
-   - Current state from primer.md
-   - Any uncommitted changes
-   - Next steps from primer.md
-5. Wait for instructions. Do not start working.
+Just report `git status` + next steps from primer.md in 3 lines. Don't
+re-read primer.md — it's already in context. Wait for instructions.
 
 $ARGUMENTS
