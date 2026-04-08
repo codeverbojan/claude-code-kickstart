@@ -41,65 +41,94 @@ TRANSCRIPT=$(read_json "transcript_path")
 # No message content to judge → allow stop.
 [ -z "$LAST_MSG" ] && exit 0
 
-# --- Gate 1: did the last turn actually touch code? --------------------------
-# Inspect the transcript tail for Edit/Write/NotebookEdit tool use in the
-# most recent assistant turn. If no transcript or no tool use, this was a
-# conversational/research reply — allow stop.
-TOUCHED_CODE=0
-if [ -n "$TRANSCRIPT" ] && [ -f "$TRANSCRIPT" ]; then
-  # Last ~40 jsonl lines cover the most recent assistant turn comfortably.
-  if tail -n 40 "$TRANSCRIPT" 2>/dev/null | grep -qE '"name":\s*"(Edit|Write|NotebookEdit|MultiEdit)"'; then
-    TOUCHED_CODE=1
-  fi
-fi
-
-[ "$TOUCHED_CODE" = "0" ] && exit 0
-
-# --- Gate 2: was the edit to code, or just config/docs/memory? ---------------
-# Pull file_path values from recent tool inputs; if every touched file is
-# docs/config/memory, allow stop.
+# --- Gates 1 & 2: scope to CURRENT assistant turn only ---------------------
+# Walk the transcript and collect Edit/Write/MultiEdit/NotebookEdit file_paths
+# that appear AFTER the most recent user message. This avoids false positives
+# from earlier turns lingering in a tail window.
 CODE_EDIT=0
 if [ -n "$TRANSCRIPT" ] && [ -f "$TRANSCRIPT" ]; then
-  PATHS=$(tail -n 80 "$TRANSCRIPT" 2>/dev/null | python3 -c "
-import sys, json, re
-paths = []
-for line in sys.stdin:
-    line = line.strip()
-    if not line: continue
-    try:
-        obj = json.loads(line)
-    except Exception:
-        continue
-    # Walk for tool_use blocks with file_path input
-    def walk(x):
-        if isinstance(x, dict):
-            if x.get('type') == 'tool_use' and x.get('name') in ('Edit','Write','MultiEdit','NotebookEdit'):
-                p = (x.get('input') or {}).get('file_path') or (x.get('input') or {}).get('notebook_path')
-                if p: paths.append(p)
-            for v in x.values(): walk(v)
-        elif isinstance(x, list):
-            for v in x: walk(v)
-    walk(obj)
-print('\n'.join(paths[-10:]))
-" 2>/dev/null)
+  PATHS=$(python3 - "$TRANSCRIPT" <<'PY' 2>/dev/null
+import sys, json
 
-  if [ -n "$PATHS" ]; then
-    while IFS= read -r p; do
-      [ -z "$p" ] && continue
-      case "$p" in
-        *.md|*.mdx|*.txt|*.json|*.yaml|*.yml|*.toml|*.ini|*.cfg|*.env*|*.lock|*CLAUDE*|*primer*|*gotchas*|*patterns*|*decisions*|*.claude/*|*.github/*|*README*|*LICENSE*)
-          ;;
-        *)
-          CODE_EDIT=1
-          ;;
-      esac
-    done <<EOF
+path = sys.argv[1]
+entries = []
+try:
+    with open(path, 'r') as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                entries.append(json.loads(line))
+            except Exception:
+                pass
+except Exception:
+    sys.exit(0)
+
+# Find the index of the most recent user message (role=user).
+# Transcript entries vary in shape; check both top-level "role" and nested "message.role".
+def get_role(entry):
+    if isinstance(entry, dict):
+        r = entry.get('role')
+        if r: return r
+        m = entry.get('message')
+        if isinstance(m, dict):
+            return m.get('role')
+    return None
+
+last_user_idx = -1
+for i, e in enumerate(entries):
+    if get_role(e) == 'user':
+        last_user_idx = i
+
+# Only inspect entries strictly after the last user message (current turn).
+current_turn = entries[last_user_idx + 1:] if last_user_idx >= 0 else entries
+
+EDIT_TOOLS = ('Edit', 'Write', 'MultiEdit', 'NotebookEdit')
+paths = []
+
+def walk(x):
+    if isinstance(x, dict):
+        if x.get('type') == 'tool_use' and x.get('name') in EDIT_TOOLS:
+            inp = x.get('input') or {}
+            p = inp.get('file_path') or inp.get('notebook_path')
+            if p:
+                paths.append(p)
+        for v in x.values():
+            walk(v)
+    elif isinstance(x, list):
+        for v in x:
+            walk(v)
+
+for e in current_turn:
+    walk(e)
+
+print('\n'.join(paths))
+PY
+)
+
+  # No edits in the current turn → allow stop (conversational / bash-only / etc).
+  [ -z "$PATHS" ] && exit 0
+
+  # Classify: treat docs/config/memory/tooling as non-functional.
+  while IFS= read -r p; do
+    [ -z "$p" ] && continue
+    case "$p" in
+      *.md|*.mdx|*.txt|*.json|*.yaml|*.yml|*.toml|*.ini|*.cfg|*.env*|*.lock)
+        ;;
+      *CLAUDE*|*primer*|*gotchas*|*patterns*|*decisions*)
+        ;;
+      *.claude/*|*.github/*|*README*|*LICENSE*)
+        ;;
+      */setup.sh|*/install.sh|*/Makefile|*/makefile)
+        ;;
+      *)
+        CODE_EDIT=1
+        ;;
+    esac
+  done <<EOF
 $PATHS
 EOF
-  else
-    # Couldn't extract paths but tool use was detected → be conservative.
-    CODE_EDIT=1
-  fi
 fi
 
 [ "$CODE_EDIT" = "0" ] && exit 0
