@@ -195,6 +195,31 @@ assert_hooks_installed "T5" "$DIR"
 cleanup "$DIR"
 echo ""
 
+# Lightweight helper: run fixture, assert section replaced + expected stack line
+quick_stack_test() {
+  local label="$1" fixture="$2" expected="$3"
+  echo "${BOLD}${label}: ${fixture} → ${expected}${N}"
+  local DIR
+  DIR=$(run_setup "$fixture") || { echo "  setup failed"; cleanup "$DIR"; return 1; }
+  assert_settings_valid "$label" "$DIR"
+  assert_section_replaced "$label" "$DIR"
+  assert_contains "$label" "$DIR" "CLAUDE.md" "$expected"
+  cleanup "$DIR"
+  echo ""
+}
+
+# --- W3 stack expansion tests ---
+quick_stack_test "T-DENO"    "deno"         "Deno"
+quick_stack_test "T-ELIXIR"  "elixir"       "Elixir"
+quick_stack_test "T-RUBY"    "ruby-rails"   "Ruby"
+quick_stack_test "T-DOTNET"  "dotnet"       ".NET"
+quick_stack_test "T-PHP"     "php-laravel"  "PHP"
+quick_stack_test "T-MAKE"    "make-only"    "Make-driven"
+quick_stack_test "T-DJANGO"  "django"       "Django"
+quick_stack_test "T-FLASK"   "flask"        "Flask"
+quick_stack_test "T-REMIX"   "remix"        "Remix"
+quick_stack_test "T-TURBO"   "monorepo-turbo" "Turborepo monorepo"
+
 # T-VS: version stamp added to generated Section
 echo "${BOLD}T-VS: version stamp in generated Section${N}"
 DIR=$(run_setup python-fastapi) || { echo "  setup failed"; cleanup "$DIR"; exit 1; }
@@ -243,6 +268,84 @@ else
   cat "$DIR/.upd.log" >&2
 fi
 cleanup "$DIR"
+echo ""
+
+# T-STYLE: --style=concise flag injects the Concise response-style block
+echo "${BOLD}T-STYLE: --style=concise flag${N}"
+TMP=$(mktemp -d)
+cp -R "$FIXTURES_DIR/python-fastapi"/* "$TMP"/
+bash "$SETUP" "$REPO_ROOT" "$TMP" --skip-wizard --style=concise >"$TMP/.log" 2>&1 || true
+if grep -q "Response Style: Concise" "$TMP/CLAUDE.md" 2>/dev/null; then
+  pass "T-STYLE: concise style block was injected"
+else
+  fail "T-STYLE" "--style=concise did not inject Concise block"
+fi
+# Invalid style should NOT crash, should fall back.
+cleanup "$TMP"
+TMP=$(mktemp -d)
+cp -R "$FIXTURES_DIR/python-fastapi"/* "$TMP"/
+bash "$SETUP" "$REPO_ROOT" "$TMP" --skip-wizard --style=verbose >"$TMP/.log" 2>&1 || true
+if grep -q "Response Style: Verbose" "$TMP/CLAUDE.md" 2>/dev/null; then
+  fail "T-STYLE" "deprecated --style=verbose was honored; should fall back"
+else
+  pass "T-STYLE: deprecated verbose style correctly rejected / fell back"
+fi
+cleanup "$TMP"
+echo ""
+
+# T-DRYRUN: --dry-run writes nothing but reports detection
+echo "${BOLD}T-DRYRUN: --dry-run writes no files${N}"
+TMP=$(mktemp -d)
+cp -R "$FIXTURES_DIR/python-fastapi"/* "$TMP"/
+bash "$SETUP" "$REPO_ROOT" "$TMP" --dry-run >"$TMP/.log" 2>&1 || true
+if [ -f "$TMP/CLAUDE.md" ] || [ -f "$TMP/primer.md" ] || [ -d "$TMP/.claude" ]; then
+  fail "T-DRYRUN" "--dry-run created files (should have written nothing)"
+else
+  pass "T-DRYRUN: no files written"
+fi
+if grep -q "Dry run" "$TMP/.log"; then
+  pass "T-DRYRUN: dry-run banner shown"
+else
+  fail "T-DRYRUN" "dry-run banner missing"
+fi
+if grep -q "Would write:" "$TMP/.log"; then
+  pass "T-DRYRUN: 'would write' preview shown"
+else
+  fail "T-DRYRUN" "'would write' preview missing"
+fi
+cleanup "$TMP"
+echo ""
+
+# T-SUMMARY: final summary block lists stack / response style / model
+echo "${BOLD}T-SUMMARY: Your setup summary block${N}"
+TMP=$(mktemp -d)
+cp -R "$FIXTURES_DIR/python-fastapi"/* "$TMP"/
+bash "$SETUP" "$REPO_ROOT" "$TMP" --skip-wizard --style=concise >"$TMP/.log" 2>&1 || true
+if grep -q "Your setup:" "$TMP/.log"; then
+  pass "T-SUMMARY: Your setup block shown"
+else
+  fail "T-SUMMARY" "Your setup summary missing from output"
+fi
+if grep -q "Main model:" "$TMP/.log"; then
+  pass "T-SUMMARY: main model line shown"
+else
+  fail "T-SUMMARY" "main model line missing"
+fi
+if grep -q "Response style:" "$TMP/.log"; then
+  pass "T-SUMMARY: response style line shown"
+else
+  fail "T-SUMMARY" "response style line missing"
+fi
+cleanup "$TMP"
+echo ""
+
+# T-NOVERBOSE: setup.sh source must not retain a verbose response-style block
+echo "${BOLD}T-NOVERBOSE: Verbose response style removed${N}"
+if grep -q "Response Style: Verbose" "$SETUP"; then
+  fail "T-NOVERBOSE" "setup.sh still contains a Verbose response-style block"
+else
+  pass "T-NOVERBOSE: no Verbose block in setup.sh"
+fi
 echo ""
 
 # --- Stale §-reference regression guard ------------------------------------

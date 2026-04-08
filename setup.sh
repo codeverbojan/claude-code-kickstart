@@ -22,16 +22,36 @@ WIZARD_SCHEMA_VERSION=2
 # directly when setup.sh is invoked standalone.
 CCK_SRC="${CCK_SRC:-direct}"
 
+STYLE_FLAG=""
+RESPONSE_STYLE_OVERRIDE=""
+DRY_RUN=false
 for arg in "$@"; do
   case "$arg" in
     --skip-wizard) SKIP_WIZARD=true ;;
     --update) UPDATE_MODE=true; SKIP_WIZARD=true ;;
     --reconfigure) RECONFIGURE_MODE=true ;;  # rerun wizard only; keep files
+    --dry-run|--preview) DRY_RUN=true; SKIP_WIZARD=true ;;  # report only
+    --style=*) STYLE_FLAG="${arg#--style=}" ;;  # concise | balanced | beginner
     --src=*) CCK_SRC="${arg#--src=}" ;;
     --*) ;; # unknown flag — ignore instead of treating as target dir
     *) TARGET_DIR="$arg" ;;
   esac
 done
+
+# --style=X takes effect regardless of --skip-wizard. Normalised once here
+# so both the interactive wizard (via prompt_response_style) and the
+# skip-wizard path both honour it.
+if [ -n "$STYLE_FLAG" ]; then
+  case "$STYLE_FLAG" in
+    concise|balanced|beginner) RESPONSE_STYLE_OVERRIDE="$STYLE_FLAG" ;;
+    *)
+      # Unknown / deprecated value (e.g. the removed "verbose"). Warn and
+      # fall back to balanced.
+      RESPONSE_STYLE_OVERRIDE="balanced"
+      STYLE_FLAG="balanced"  # keep prompt_response_style in sync
+      ;;
+  esac
+fi
 
 # ─── Colors ───
 BOLD="\033[1m"
@@ -55,21 +75,32 @@ copy_safe() {
 }
 
 # ─── Response-style wizard prompt ───
-# Asks the user how verbose Claude should be. Fewer tokens = cheaper sessions
-# but less explanation. More tokens = more context but higher cost per turn.
+# Asks how terse Claude should be. Fewer tokens = cheaper sessions.
+# Verbose mode was removed — it contradicted every other token-reduction
+# default in this template. If someone really wants long explanations,
+# they can edit Section 10 manually.
 prompt_response_style() {
+  # If the user passed --style=X, skip the interactive prompt entirely.
+  if [ -n "${STYLE_FLAG:-}" ]; then
+    case "$STYLE_FLAG" in
+      concise|balanced|beginner) RESPONSE_STYLE="$STYLE_FLAG" ;;
+      *)
+        echo -e "  ${YELLOW}[WARN]${RESET} unknown --style=$STYLE_FLAG, falling back to balanced"
+        RESPONSE_STYLE="balanced"
+        ;;
+    esac
+    return
+  fi
   echo ""
   echo -e "  ${BOLD}How should Claude respond?${RESET} ${DIM}(affects token cost per session)${RESET}"
-  echo -e "    1) ${BOLD}Concise${RESET}  — short answers, minimal preamble. ${DIM}Least tokens.${RESET}"
+  echo -e "    1) ${BOLD}Concise${RESET}  — short answers, minimal preamble. ${DIM}Least tokens. Recommended.${RESET}"
   echo -e "    2) ${BOLD}Balanced${RESET} — short but complete explanations. ${DIM}Middle ground.${RESET}"
-  echo -e "    3) ${BOLD}Verbose${RESET}  — detailed reasoning, trade-offs, examples. ${DIM}Most tokens.${RESET}"
-  echo -e "    4) ${BOLD}Beginner${RESET} — plain language, no jargon. ${DIM}Explains like to a smart 15-year-old.${RESET}"
+  echo -e "    3) ${BOLD}Beginner${RESET} — plain language, no jargon. ${DIM}For non-developers.${RESET}"
   printf "  Choice [${BOLD}2${RESET}]: "
   read -r STYLE_CHOICE
   case "${STYLE_CHOICE:-2}" in
     1) RESPONSE_STYLE="concise" ;;
-    3) RESPONSE_STYLE="verbose" ;;
-    4) RESPONSE_STYLE="beginner" ;;
+    3) RESPONSE_STYLE="beginner" ;;
     *) RESPONSE_STYLE="balanced" ;;
   esac
 }
@@ -87,18 +118,6 @@ build_response_style_block() {
 - No tables, no headers, no bullet lists unless the user explicitly asks for one.
 - Code tasks: return the code with a one-line explanation only if non-obvious.
 - Verification output still required per CLAUDE.md §5 (non-negotiable).
-STYLE_EOF
-      ;;
-    verbose)
-      cat <<'STYLE_EOF'
-
-### Response Style: Verbose
-
-- Explain your reasoning and trade-offs before the answer when decisions are non-trivial.
-- Include concrete examples, alternatives considered, and why you ruled them out.
-- Flag edge cases and assumptions the user should verify.
-- Tables and structured formatting are welcome when they aid comprehension.
-- Still obey CLAUDE.md §3 (no over-engineering) — verbose in *explanation*, not in code.
 STYLE_EOF
       ;;
     beginner)
@@ -142,6 +161,25 @@ STYLE_EOF
   esac
 }
 
+# ─── Warn on commands whose binary isn't on PATH ───
+# Validates detected/user-supplied command strings. First token is the
+# binary name (or `./bin/foo` — local paths are skipped). Non-fatal: just
+# prints a warning so the user knows Claude may hit a missing tool.
+validate_command() {
+  local label="$1"
+  local cmd="$2"
+  [ -z "$cmd" ] && return
+  local bin
+  bin=$(printf '%s' "$cmd" | awk '{print $1}')
+  case "$bin" in
+    ./*|/*|../*) return ;;  # explicit local path — don't check PATH
+    make|npm|npx|pnpm|yarn|bun|deno|go|cargo|python|python3|pip|pytest|ruff|mypy|uv|poetry|flask|gradle|mvn|dotnet|php|bundle|mix|iex) ;; # allow through even if not installed — user may install later
+  esac
+  if ! command -v "$bin" >/dev/null 2>&1; then
+    echo -e "  ${YELLOW}[WARN]${RESET} ${label}: \`${bin}\` not found on PATH (configure it later or ignore)"
+  fi
+}
+
 # ─── Read a JSON key from package.json (no jq dependency) ───
 pkg_script() {
   local key="$1"
@@ -168,7 +206,7 @@ CMD_LINT=""
 CMD_TEST=""
 CMD_BUILD=""
 CONVENTIONS=""
-RESPONSE_STYLE="balanced"  # concise | balanced | verbose
+RESPONSE_STYLE="${RESPONSE_STYLE_OVERRIDE:-balanced}"  # concise | balanced | beginner
 DETECTED=false
 
 # Detect stack from project files
@@ -268,31 +306,239 @@ elif [ -f "pyproject.toml" ] || [ -f "requirements.txt" ] || [ -f "setup.py" ]; 
     grep -q "^lint:" Makefile 2>/dev/null && CMD_LINT="make lint"
   fi
 
-  # Try to detect dev server from pyproject.toml
-  if [ -z "$CMD_DEV" ] && [ -f "pyproject.toml" ]; then
-    if grep -q "fastapi\|uvicorn" pyproject.toml 2>/dev/null; then
-      CMD_DEV="uvicorn main:app --reload"
-    elif grep -q "django" pyproject.toml 2>/dev/null; then
-      CMD_DEV="python manage.py runserver"
-    elif grep -q "flask" pyproject.toml 2>/dev/null; then
-      CMD_DEV="flask run --reload"
+  # Try to detect Python framework across pyproject.toml, requirements.txt,
+  # setup.py. Populates CMD_DEV and sets PY_FRAMEWORK for starter matching.
+  if [ -z "$CMD_DEV" ]; then
+    PY_SOURCES=""
+    [ -f "pyproject.toml" ] && PY_SOURCES="$PY_SOURCES pyproject.toml"
+    [ -f "requirements.txt" ] && PY_SOURCES="$PY_SOURCES requirements.txt"
+    [ -f "setup.py" ] && PY_SOURCES="$PY_SOURCES setup.py"
+    if [ -n "$PY_SOURCES" ]; then
+      if grep -qi "fastapi\|uvicorn" $PY_SOURCES 2>/dev/null; then
+        CMD_DEV="uvicorn main:app --reload"
+        PY_FRAMEWORK="fastapi"
+      elif grep -qi "^django\|^Django" $PY_SOURCES 2>/dev/null || grep -qi '"django"' $PY_SOURCES 2>/dev/null; then
+        CMD_DEV="python manage.py runserver"
+        PY_FRAMEWORK="django"
+      elif grep -qi "flask" $PY_SOURCES 2>/dev/null; then
+        CMD_DEV="flask run --reload"
+        PY_FRAMEWORK="flask"
+      elif grep -qi "langchain\|llama_index\|anthropic\|openai" $PY_SOURCES 2>/dev/null; then
+        CMD_DEV="python main.py"
+        PY_FRAMEWORK="llm"
+      fi
     fi
   fi
+
+elif [ -f "deno.json" ] || [ -f "deno.jsonc" ]; then
+  STACK="deno"
+  PKG_MGR="deno"
+  DETECTED=true
+  CMD_DEV="deno task dev"
+  CMD_TYPECHECK="deno check **/*.ts"
+  CMD_LINT="deno lint"
+  CMD_TEST="deno test"
+  CMD_BUILD="deno compile"
+
+elif [ -f "bun.lockb" ] || [ -f "bun.lock" ]; then
+  # Bun-only project (no package.json — rare, but possible for single-file
+  # scripts or bun workspaces with a bunfig.toml at root).
+  STACK="bun"
+  PKG_MGR="bun"
+  DETECTED=true
+  CMD_DEV="bun run dev"
+  CMD_TYPECHECK="bun run typecheck"
+  CMD_LINT="bun run lint"
+  CMD_TEST="bun test"
+  CMD_BUILD="bun run build"
+
+elif [ -f "mix.exs" ]; then
+  STACK="elixir"
+  PKG_MGR="mix"
+  DETECTED=true
+  CMD_DEV="mix phx.server"
+  CMD_TYPECHECK="mix dialyzer"
+  CMD_LINT="mix credo"
+  CMD_TEST="mix test"
+  CMD_BUILD="mix compile"
+  # Non-Phoenix projects
+  if ! grep -q "phoenix" mix.exs 2>/dev/null; then
+    CMD_DEV="iex -S mix"
+  fi
+
+elif [ -f "Gemfile" ]; then
+  STACK="ruby"
+  PKG_MGR="bundler"
+  DETECTED=true
+  CMD_TEST="bundle exec rspec"
+  CMD_LINT="bundle exec rubocop"
+  CMD_BUILD=""
+  if grep -qi "rails" Gemfile 2>/dev/null; then
+    CMD_DEV="bin/rails server"
+    CMD_TYPECHECK="bin/rails test:system"
+  elif grep -qi "sinatra" Gemfile 2>/dev/null; then
+    CMD_DEV="bundle exec rackup"
+  else
+    CMD_DEV="bundle exec ruby"
+  fi
+
+elif [ -f "pom.xml" ]; then
+  STACK="java"
+  PKG_MGR="maven"
+  DETECTED=true
+  CMD_DEV="mvn spring-boot:run"
+  CMD_TYPECHECK="mvn compile"
+  CMD_LINT="mvn checkstyle:check"
+  CMD_TEST="mvn test"
+  CMD_BUILD="mvn package"
+
+elif [ -f "build.gradle" ] || [ -f "build.gradle.kts" ]; then
+  STACK="java"  # covers both Java and Kotlin JVM projects
+  PKG_MGR="gradle"
+  DETECTED=true
+  CMD_DEV="./gradlew bootRun"
+  CMD_TYPECHECK="./gradlew compileJava"
+  CMD_LINT="./gradlew check"
+  CMD_TEST="./gradlew test"
+  CMD_BUILD="./gradlew build"
+  # Kotlin-specific tweaks
+  if [ -f "build.gradle.kts" ]; then
+    STACK="kotlin"
+    CMD_TYPECHECK="./gradlew compileKotlin"
+  fi
+
+elif ls *.csproj >/dev/null 2>&1 || ls *.sln >/dev/null 2>&1; then
+  STACK="dotnet"
+  PKG_MGR="dotnet"
+  DETECTED=true
+  CMD_DEV="dotnet run"
+  CMD_TYPECHECK="dotnet build --no-restore"
+  CMD_LINT="dotnet format --verify-no-changes"
+  CMD_TEST="dotnet test"
+  CMD_BUILD="dotnet build --configuration Release"
+
+elif [ -f "composer.json" ]; then
+  STACK="php"
+  PKG_MGR="composer"
+  DETECTED=true
+  CMD_LINT="vendor/bin/phpcs"
+  CMD_TEST="vendor/bin/phpunit"
+  CMD_BUILD="composer install --no-dev --optimize-autoloader"
+  if grep -qi "laravel" composer.json 2>/dev/null; then
+    CMD_DEV="php artisan serve"
+    CMD_TYPECHECK="vendor/bin/phpstan analyse"
+  elif grep -qi "symfony" composer.json 2>/dev/null; then
+    CMD_DEV="symfony server:start"
+    CMD_TYPECHECK="vendor/bin/phpstan analyse"
+  else
+    CMD_DEV="php -S localhost:8000"
+    CMD_TYPECHECK=""
+  fi
+
+elif [ -f "Makefile" ] || [ -f "makefile" ]; then
+  # Makefile-only project (no recognisable language marker). Treat as
+  # "other" but populate commands from make targets if they exist.
+  STACK="make"
+  PKG_MGR=""
+  DETECTED=true
+  MF="Makefile"
+  [ -f "makefile" ] && MF="makefile"
+  grep -q "^dev:" "$MF" 2>/dev/null && CMD_DEV="make dev"
+  grep -q "^test:" "$MF" 2>/dev/null && CMD_TEST="make test"
+  grep -q "^lint:" "$MF" 2>/dev/null && CMD_LINT="make lint"
+  grep -q "^build:" "$MF" 2>/dev/null && CMD_BUILD="make build"
+  grep -q "^check:" "$MF" 2>/dev/null && CMD_TYPECHECK="make check"
+fi
+
+# ─── Orthogonal detection: monorepo markers ───
+# Monorepo is a flag, not a stack. Affects wording in Section 10 and
+# signals to reviewers that workspace-scoped commands may be needed.
+IS_MONOREPO=false
+MONOREPO_TOOL=""
+if [ -f "pnpm-workspace.yaml" ] || [ -f "pnpm-workspace.yml" ]; then
+  IS_MONOREPO=true
+  MONOREPO_TOOL="pnpm workspaces"
+elif [ -f "turbo.json" ]; then
+  IS_MONOREPO=true
+  MONOREPO_TOOL="Turborepo"
+elif [ -f "nx.json" ]; then
+  IS_MONOREPO=true
+  MONOREPO_TOOL="Nx"
+elif [ -f "lerna.json" ]; then
+  IS_MONOREPO=true
+  MONOREPO_TOOL="Lerna"
 fi
 
 # ─── Show Detection Results / Run Wizard ───
 
-if [ "$DETECTED" = true ] && [ "$SKIP_WIZARD" = false ]; then
+# ─── Detect specific framework within the stack (runs always, not just in interactive mode) ───
+# Populates NODE_FRAMEWORK / PY_FRAMEWORK so Section 10 can include a
+# specific Stack line even when no matching starter file exists.
+NODE_FRAMEWORK="${NODE_FRAMEWORK:-}"
+if [ "$STACK" = "node" ] && [ -f "package.json" ]; then
+  if grep -q '"next"' package.json 2>/dev/null; then
+    NODE_FRAMEWORK="Next.js"
+  elif grep -q '"@remix-run/' package.json 2>/dev/null; then
+    NODE_FRAMEWORK="Remix"
+  elif grep -q '"@sveltejs/kit"' package.json 2>/dev/null; then
+    NODE_FRAMEWORK="SvelteKit"
+  elif grep -q '"astro"' package.json 2>/dev/null; then
+    NODE_FRAMEWORK="Astro"
+  elif grep -q '"nuxt"' package.json 2>/dev/null; then
+    NODE_FRAMEWORK="Nuxt"
+  elif grep -q '"vite"' package.json 2>/dev/null; then
+    if grep -q '"react"' package.json 2>/dev/null; then
+      NODE_FRAMEWORK="Vite + React"
+    elif grep -q '"vue"' package.json 2>/dev/null; then
+      NODE_FRAMEWORK="Vite + Vue"
+    else
+      NODE_FRAMEWORK="Vite"
+    fi
+  fi
+fi
+
+if { [ "$DETECTED" = true ] && [ "$SKIP_WIZARD" = false ]; } || [ "$DRY_RUN" = true ]; then
+  if [ "$DRY_RUN" = true ]; then
+    echo -e "  ${BOLD}Dry run — nothing will be written.${RESET}"
+    echo ""
+  fi
   echo -e "  ${GREEN}Auto-detected:${RESET}"
   echo -e "    Project:  ${BOLD}$PROJECT_NAME${RESET}"
-  echo -e "    Stack:    ${BOLD}$STACK${RESET}"
-  echo -e "    Package:  ${BOLD}$PKG_MGR${RESET}"
+  echo -e "    Stack:    ${BOLD}${STACK:-<none>}${RESET}"
+  [ -n "$NODE_FRAMEWORK" ] && echo -e "    Framework:${BOLD} $NODE_FRAMEWORK${RESET}"
+  [ -n "${PY_FRAMEWORK:-}" ] && echo -e "    Framework:${BOLD} $PY_FRAMEWORK${RESET}"
+  [ -n "$PKG_MGR" ] && echo -e "    Package:  ${BOLD}$PKG_MGR${RESET}"
+  [ "$IS_MONOREPO" = true ] && echo -e "    Monorepo: ${BOLD}$MONOREPO_TOOL${RESET}"
   [ -n "$CMD_DEV" ] && echo -e "    Dev:      ${DIM}$CMD_DEV${RESET}"
   [ -n "$CMD_TYPECHECK" ] && echo -e "    Typecheck:${DIM} $CMD_TYPECHECK${RESET}"
   [ -n "$CMD_LINT" ] && echo -e "    Lint:     ${DIM}$CMD_LINT${RESET}"
   [ -n "$CMD_TEST" ] && echo -e "    Test:     ${DIM}$CMD_TEST${RESET}"
   [ -n "$CMD_BUILD" ] && echo -e "    Build:    ${DIM}$CMD_BUILD${RESET}"
   echo ""
+
+  # Validate each detected command — non-fatal warnings only.
+  validate_command "Dev"       "$CMD_DEV"
+  validate_command "Typecheck" "$CMD_TYPECHECK"
+  validate_command "Lint"      "$CMD_LINT"
+  validate_command "Test"      "$CMD_TEST"
+  validate_command "Build"     "$CMD_BUILD"
+
+  if [ "$DRY_RUN" = true ]; then
+    echo ""
+    echo -e "  ${BOLD}Would write:${RESET}"
+    echo -e "    CLAUDE.md (Project-Specific Configuration section)"
+    echo -e "    .claude/settings.json, .claude/mcp.json"
+    echo -e "    .claude/agents/*, .claude/commands/*, .claude/skills/*"
+    echo -e "    .claude/hooks/*.sh"
+    echo -e "    primer.md, gotchas.md, patterns.md, decisions.md, CHEATSHEET.md"
+    [ "$STACK" = "node" ] && echo -e "    .npmrc (supply chain guards)"
+    echo ""
+    echo -e "  ${DIM}(dry run — no files touched. Re-run without --dry-run to install.)${RESET}"
+    exit 0
+  fi
+fi
+
+if [ "$DETECTED" = true ] && [ "$SKIP_WIZARD" = false ]; then
   printf "  Look right? [${BOLD}Y${RESET}/n]: "
   read -r CONFIRM
   if [ "$CONFIRM" = "n" ] || [ "$CONFIRM" = "N" ]; then
@@ -303,13 +549,13 @@ if [ "$DETECTED" = true ] && [ "$SKIP_WIZARD" = false ]; then
     USE_STARTER_CONFIG=""
     case "$STACK" in
       node)
-        if [ -f "package.json" ] && grep -q '"next"' package.json 2>/dev/null; then
+        if [ "$NODE_FRAMEWORK" = "Next.js" ]; then
           STARTER_FILE="$TMP_DIR/starters/nextjs.md"
           STARTER_NAME="Next.js"
         fi
         ;;
       python)
-        if [ -f "pyproject.toml" ] && grep -q "fastapi" pyproject.toml 2>/dev/null; then
+        if [ "${PY_FRAMEWORK:-}" = "fastapi" ]; then
           STARTER_FILE="$TMP_DIR/starters/fastapi.md"
           STARTER_NAME="FastAPI"
         fi
@@ -337,7 +583,12 @@ if [ "$DETECTED" = true ] && [ "$SKIP_WIZARD" = false ]; then
     fi
 
     # Ask for conventions (only thing we can't auto-detect)
-    printf "  Code conventions to enforce? (optional): "
+    echo -e "  ${DIM}Code conventions Claude should enforce (one line).${RESET}"
+    echo -e "  ${DIM}Examples:${RESET}"
+    echo -e "  ${DIM}  - strict TypeScript, no any${RESET}"
+    echo -e "  ${DIM}  - Server Components by default, 'use client' only when needed${RESET}"
+    echo -e "  ${DIM}  - all errors wrapped with context; no bare exceptions${RESET}"
+    printf "  Conventions (optional): "
     read -r CONVENTIONS
 
     prompt_response_style
@@ -455,7 +706,12 @@ if [ "$DETECTED" = false ] && [ "$SKIP_WIZARD" = false ]; then
 
   # 4. Conventions
   echo ""
-  printf "  Code conventions to enforce? (e.g. 'strict TypeScript, no any'): "
+  echo -e "  ${DIM}Code conventions Claude should enforce (one line).${RESET}"
+  echo -e "  ${DIM}Examples:${RESET}"
+  echo -e "  ${DIM}  - strict TypeScript, no any${RESET}"
+  echo -e "  ${DIM}  - Server Components by default${RESET}"
+  echo -e "  ${DIM}  - 100-char lines, trailing commas, single quotes${RESET}"
+  printf "  Conventions (optional): "
   read -r CONVENTIONS
 
   # 5. Response style
@@ -626,12 +882,44 @@ if { [ "$UPDATE_MODE" != true ] || [ "$RECONFIGURE_MODE" = true ]; } && { [ -n "
       CONFIG_SECTION="$CONFIG_SECTION\n### Project\n$PROJECT_NAME\n"
     fi
 
+    # Compose the Stack line, using the specific framework when known.
+    STACK_LINE=""
     case "$STACK" in
-      node)   CONFIG_SECTION="$CONFIG_SECTION\n### Stack\nNode.js / TypeScript\n" ;;
-      python) CONFIG_SECTION="$CONFIG_SECTION\n### Stack\nPython\n" ;;
-      go)     CONFIG_SECTION="$CONFIG_SECTION\n### Stack\nGo\n" ;;
-      rust)   CONFIG_SECTION="$CONFIG_SECTION\n### Stack\nRust\n" ;;
+      node)
+        if [ -n "$NODE_FRAMEWORK" ]; then
+          STACK_LINE="Node.js / TypeScript — $NODE_FRAMEWORK"
+        else
+          STACK_LINE="Node.js / TypeScript"
+        fi
+        ;;
+      python)
+        case "${PY_FRAMEWORK:-}" in
+          fastapi) STACK_LINE="Python — FastAPI" ;;
+          django)  STACK_LINE="Python — Django" ;;
+          flask)   STACK_LINE="Python — Flask" ;;
+          llm)     STACK_LINE="Python — LLM / AI (LangChain / Anthropic / OpenAI SDK)" ;;
+          *)       STACK_LINE="Python" ;;
+        esac
+        ;;
+      go)      STACK_LINE="Go" ;;
+      rust)    STACK_LINE="Rust" ;;
+      deno)    STACK_LINE="Deno / TypeScript" ;;
+      bun)     STACK_LINE="Bun / TypeScript" ;;
+      elixir)  STACK_LINE="Elixir" ;;
+      ruby)    STACK_LINE="Ruby" ;;
+      java)    STACK_LINE="Java (JVM)" ;;
+      kotlin)  STACK_LINE="Kotlin (JVM)" ;;
+      dotnet)  STACK_LINE=".NET / C#" ;;
+      php)     STACK_LINE="PHP" ;;
+      make)    STACK_LINE="Make-driven project" ;;
     esac
+    if [ -n "$STACK_LINE" ]; then
+      CONFIG_SECTION="$CONFIG_SECTION\n### Stack\n$STACK_LINE"
+      if [ "$IS_MONOREPO" = true ]; then
+        CONFIG_SECTION="$CONFIG_SECTION ($MONOREPO_TOOL monorepo — prefer workspace-scoped commands where possible)"
+      fi
+      CONFIG_SECTION="$CONFIG_SECTION\n"
+    fi
 
   if [ -n "$CMD_DEV" ] || [ -n "$CMD_TEST" ]; then
     CONFIG_SECTION="$CONFIG_SECTION\n### Build & Dev Commands"
@@ -806,15 +1094,25 @@ echo ""
 echo -e "  ${GREEN}${BOLD}Done!${RESET} Claude Code Kickstart installed."
 echo ""
 
-if [ -n "$PROJECT_NAME" ]; then
-  echo -e "  Project: ${BOLD}$PROJECT_NAME${RESET}"
-fi
+echo -e "  ${BOLD}Your setup:${RESET}"
+[ -n "$PROJECT_NAME" ]         && echo -e "    Project:       ${BOLD}$PROJECT_NAME${RESET}"
 if [ -n "$STACK" ] && [ "$STACK" != "other" ]; then
-  echo -e "  Stack:   ${BOLD}$STACK${RESET}"
+  if [ -n "$NODE_FRAMEWORK" ]; then
+    echo -e "    Stack:         ${BOLD}$STACK${RESET} ${DIM}($NODE_FRAMEWORK)${RESET}"
+  elif [ -n "${PY_FRAMEWORK:-}" ]; then
+    echo -e "    Stack:         ${BOLD}$STACK${RESET} ${DIM}($PY_FRAMEWORK)${RESET}"
+  else
+    echo -e "    Stack:         ${BOLD}$STACK${RESET}"
+  fi
 fi
-if [ -n "$PKG_MGR" ]; then
-  echo -e "  Package: ${BOLD}$PKG_MGR${RESET}"
-fi
+[ -n "$PKG_MGR" ]              && echo -e "    Package mgr:   ${BOLD}$PKG_MGR${RESET}"
+[ "$IS_MONOREPO" = true ]      && echo -e "    Monorepo:      ${BOLD}$MONOREPO_TOOL${RESET}"
+[ -n "$CMD_DEV" ]              && echo -e "    Dev command:   ${DIM}$CMD_DEV${RESET}"
+[ -n "$CMD_TEST" ]             && echo -e "    Test command:  ${DIM}$CMD_TEST${RESET}"
+[ -n "$CMD_LINT" ]             && echo -e "    Lint command:  ${DIM}$CMD_LINT${RESET}"
+[ -n "$CMD_TYPECHECK" ]        && echo -e "    Typecheck:     ${DIM}$CMD_TYPECHECK${RESET}"
+[ -n "$RESPONSE_STYLE" ]       && echo -e "    Response style:${BOLD} $RESPONSE_STYLE${RESET}"
+echo -e "    Main model:    ${BOLD}opusplan${RESET} ${DIM}(Opus in plan mode, Sonnet in execution)${RESET}"
 
 echo ""
 echo -e "  ${BOLD}Get started:${RESET}"

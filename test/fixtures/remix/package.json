@@ -1,0 +1,13 @@
+{
+  "name": "fixture-remix",
+  "scripts": {
+    "dev": "remix vite:dev",
+    "build": "remix vite:build",
+    "test": "vitest"
+  },
+  "dependencies": {
+    "@remix-run/react": "^2.10.0",
+    "@remix-run/node": "^2.10.0",
+    "react": "^18"
+  }
+}
