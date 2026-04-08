@@ -6,16 +6,34 @@
 # (via systemMessage), not to Claude.
 
 PROJECT_DIR="${CLAUDE_PROJECT_DIR:-.}"
-# Session-scoped tips file (hashed project path, macOS + Linux compatible)
-HASH=$(printf '%s' "$PROJECT_DIR" | md5sum 2>/dev/null | cut -c1-8 || printf '%s' "$PROJECT_DIR" | md5 -q 2>/dev/null | cut -c1-8 || echo "default")
-TIPS_SHOWN="/tmp/.claude-tips-${HASH}"
 
-# Read prompt from stdin (safe JSON parsing via python3, fallback to grep)
+# Read hook payload from stdin (safe JSON parsing via python3, fallback to grep).
 INPUT=$(cat)
 PROMPT=$(printf '%s' "$INPUT" | python3 -c "import sys,json; print(json.load(sys.stdin).get('prompt',''))" 2>/dev/null)
+SESSION_ID=$(printf '%s' "$INPUT" | python3 -c "import sys,json; print(json.load(sys.stdin).get('session_id',''))" 2>/dev/null)
 if [ -z "$PROMPT" ]; then
   PROMPT=$(printf '%s' "$INPUT" | grep -o '"prompt":"[^"]*"' | head -1 | sed 's/"prompt":"//;s/"$//')
 fi
+if [ -z "$SESSION_ID" ]; then
+  SESSION_ID=$(printf '%s' "$INPUT" | grep -o '"session_id":"[^"]*"' | head -1 | sed 's/"session_id":"//;s/"$//')
+fi
+
+# Session-scoped tips file — keyed on the Claude Code session_id so tips
+# reset naturally between sessions. Falls back to a per-project-per-day key
+# if session_id is missing (won't happen in real Claude Code invocations).
+#
+# The previous implementation used a /tmp path with a project hash that
+# evaluated to empty on macOS (md5sum absent, pipe to cut masked the exit
+# code, fallback never fired). Result: every project shared one tips file
+# globally and tips never reset across sessions.
+if [ -n "$SESSION_ID" ]; then
+  TIPS_KEY="$SESSION_ID"
+else
+  PROJ_KEY=$(basename "$PROJECT_DIR" | tr -cd 'a-zA-Z0-9')
+  DAY_KEY=$(date +%Y%m%d 2>/dev/null || echo default)
+  TIPS_KEY="${PROJ_KEY:-default}-${DAY_KEY}"
+fi
+TIPS_SHOWN="${TMPDIR:-/tmp}/claude-tips-${TIPS_KEY}"
 
 # Lowercase for matching
 PROMPT_LOWER=$(printf '%s' "$PROMPT" | tr '[:upper:]' '[:lower:]')
