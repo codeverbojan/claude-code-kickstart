@@ -25,13 +25,23 @@ CCK_SRC="${CCK_SRC:-direct}"
 STYLE_FLAG=""
 RESPONSE_STYLE_OVERRIDE=""
 DRY_RUN=false
+ADVANCED_FLAG=false
+CUSTOM_MODEL=""
+SKIP_AGENTS=""        # comma-separated agent names to skip
+SKIP_MCP=false
+SKIP_SECTION10=false
 for arg in "$@"; do
   case "$arg" in
     --skip-wizard) SKIP_WIZARD=true ;;
     --update) UPDATE_MODE=true; SKIP_WIZARD=true ;;
     --reconfigure) RECONFIGURE_MODE=true ;;  # rerun wizard only; keep files
     --dry-run|--preview) DRY_RUN=true; SKIP_WIZARD=true ;;  # report only
+    --advanced) ADVANCED_FLAG=true ;;         # unlock power-user options
     --style=*) STYLE_FLAG="${arg#--style=}" ;;  # concise | balanced | beginner
+    --model=*) CUSTOM_MODEL="${arg#--model=}" ;;  # sonnet | opus | haiku | opusplan
+    --no-mcp) SKIP_MCP=true ;;
+    --no-section) SKIP_SECTION10=true ;;
+    --skip-agents=*) SKIP_AGENTS="${arg#--skip-agents=}" ;;
     --src=*) CCK_SRC="${arg#--src=}" ;;
     --*) ;; # unknown flag — ignore instead of treating as target dir
     *) TARGET_DIR="$arg" ;;
@@ -49,6 +59,19 @@ if [ -n "$STYLE_FLAG" ]; then
       # fall back to balanced.
       RESPONSE_STYLE_OVERRIDE="balanced"
       STYLE_FLAG="balanced"  # keep prompt_response_style in sync
+      ;;
+  esac
+fi
+
+# --model=X validation. Reject unknown values so we never write a broken
+# config to settings.json (Claude Code refuses to start with a bogus
+# model id). Silently ignore with a warning — don't abort the install.
+if [ -n "$CUSTOM_MODEL" ]; then
+  case "$CUSTOM_MODEL" in
+    sonnet|opus|haiku|opusplan) ;;
+    *)
+      printf '\033[33m[WARN]\033[0m unknown --model=%s (expected sonnet|opus|haiku|opusplan) — ignoring\n' "$CUSTOM_MODEL" >&2
+      CUSTOM_MODEL=""
       ;;
   esac
 fi
@@ -72,6 +95,155 @@ copy_safe() {
   mkdir -p "$(dirname "$dst")"
   cp "$src" "$dst"
   echo -e "  ${GREEN}[COPY]${RESET} $dst"
+}
+
+# ─── Advanced options (power users) ───
+# Walked when the user answers Y to "Customize advanced options?" or when
+# --advanced is on the command line. Each answer overrides install-time
+# defaults without touching the standard wizard experience.
+prompt_advanced_options() {
+  echo ""
+  echo -e "  ${BOLD}Advanced options${RESET} ${DIM}(press Enter to accept each default)${RESET}"
+
+  # Main session model
+  if [ -z "$CUSTOM_MODEL" ]; then
+    echo ""
+    echo -e "  ${BOLD}Main session model?${RESET}"
+    echo -e "    1) ${BOLD}opusplan${RESET}  — Opus in plan mode, Sonnet in execution ${DIM}[default, recommended]${RESET}"
+    echo -e "    2) sonnet    — Sonnet 4.6 everywhere"
+    echo -e "    3) opus      — Opus 4.6 everywhere ${DIM}(most expensive)${RESET}"
+    echo -e "    4) haiku     — Haiku 4.5 everywhere ${DIM}(cheapest, weakest on architecture)${RESET}"
+    printf "  Choice [${BOLD}1${RESET}]: "
+    read -r MODEL_CHOICE
+    case "${MODEL_CHOICE:-1}" in
+      2) CUSTOM_MODEL="sonnet" ;;
+      3) CUSTOM_MODEL="opus" ;;
+      4) CUSTOM_MODEL="haiku" ;;
+      *) CUSTOM_MODEL="opusplan" ;;
+    esac
+  fi
+
+  # Skip specific sub-agents
+  echo ""
+  echo -e "  ${BOLD}Sub-agents${RESET} ${DIM}(skip agents you don't need)${RESET}"
+  echo -e "  Installed by default: code-reviewer, security-reviewer, test-runner, accessibility-reviewer, researcher"
+  printf "  Skip any? ${DIM}(comma-separated names, or Enter for none)${RESET}: "
+  read -r SKIP_AGENTS_INPUT
+  [ -n "$SKIP_AGENTS_INPUT" ] && SKIP_AGENTS="$SKIP_AGENTS_INPUT"
+
+  # MCP servers
+  echo ""
+  printf "  Skip MCP servers (Playwright + Context7 in .claude/mcp.json)? [y/${BOLD}N${RESET}]: "
+  read -r SKIP_MCP_INPUT
+  case "${SKIP_MCP_INPUT:-n}" in
+    y|Y|yes|YES) SKIP_MCP=true ;;
+  esac
+
+  # Skip Section 10 entirely
+  echo ""
+  printf "  Skip CLAUDE.md Project-Specific Configuration (I'll write it myself)? [y/${BOLD}N${RESET}]: "
+  read -r SKIP_SECTION_INPUT
+  case "${SKIP_SECTION_INPUT:-n}" in
+    y|Y|yes|YES) SKIP_SECTION10=true ;;
+  esac
+}
+
+# ─── Substantive questions about the project ───
+# Five short questions that measurably improve reviewer output quality.
+# Each defaults to "skip/none" so existing users pressing Enter through
+# the wizard get identical behaviour to before. Only asked when
+# CCK_ASK_EXTRAS=true, which is set by a top-level "Quick questions?" toggle.
+PROJECT_DB=""
+PROJECT_AUTH=""
+PROJECT_DEPLOY=""
+PROJECT_USES_LLM=""
+PROJECT_SECRETS=""
+
+prompt_substantive_questions() {
+  [ "${CCK_ASK_EXTRAS:-false}" = "true" ] || return
+  echo ""
+  echo -e "  ${BOLD}A few more details${RESET} ${DIM}(each is optional — press Enter to skip)${RESET}"
+
+  # Database
+  echo ""
+  echo -e "  ${BOLD}Database?${RESET}"
+  echo -e "    1) Postgres   2) MySQL   3) SQLite   4) MongoDB   5) DynamoDB"
+  echo -e "    6) Redis-only   7) Other   ${DIM}[Enter = none]${RESET}"
+  printf "  Choice: "
+  read -r DB_CHOICE
+  case "${DB_CHOICE:-0}" in
+    1) PROJECT_DB="Postgres" ;;
+    2) PROJECT_DB="MySQL" ;;
+    3) PROJECT_DB="SQLite" ;;
+    4) PROJECT_DB="MongoDB" ;;
+    5) PROJECT_DB="DynamoDB" ;;
+    6) PROJECT_DB="Redis (cache/queue)" ;;
+    7) printf "  Name: "; read -r PROJECT_DB ;;
+    *) PROJECT_DB="" ;;
+  esac
+
+  # Auth
+  echo ""
+  echo -e "  ${BOLD}Auth / identity?${RESET}"
+  echo -e "    1) NextAuth.js   2) Clerk   3) Auth0   4) Supabase Auth"
+  echo -e "    5) AWS Cognito   6) Custom JWT   7) Session cookies   ${DIM}[Enter = none]${RESET}"
+  printf "  Choice: "
+  read -r AUTH_CHOICE
+  case "${AUTH_CHOICE:-0}" in
+    1) PROJECT_AUTH="NextAuth.js" ;;
+    2) PROJECT_AUTH="Clerk" ;;
+    3) PROJECT_AUTH="Auth0" ;;
+    4) PROJECT_AUTH="Supabase Auth" ;;
+    5) PROJECT_AUTH="AWS Cognito" ;;
+    6) PROJECT_AUTH="Custom JWT" ;;
+    7) PROJECT_AUTH="Session cookies" ;;
+    *) PROJECT_AUTH="" ;;
+  esac
+
+  # Deployment
+  echo ""
+  echo -e "  ${BOLD}Deployment target?${RESET}"
+  echo -e "    1) Vercel   2) Railway   3) Fly.io   4) AWS"
+  echo -e "    5) GCP   6) Azure   7) Self-hosted / VPS   ${DIM}[Enter = none]${RESET}"
+  printf "  Choice: "
+  read -r DEPLOY_CHOICE
+  case "${DEPLOY_CHOICE:-0}" in
+    1) PROJECT_DEPLOY="Vercel" ;;
+    2) PROJECT_DEPLOY="Railway" ;;
+    3) PROJECT_DEPLOY="Fly.io" ;;
+    4) PROJECT_DEPLOY="AWS" ;;
+    5) PROJECT_DEPLOY="GCP" ;;
+    6) PROJECT_DEPLOY="Azure" ;;
+    7) PROJECT_DEPLOY="Self-hosted" ;;
+    *) PROJECT_DEPLOY="" ;;
+  esac
+
+  # LLM usage → auto-install claude-api skill guidance
+  echo ""
+  echo -e "  ${BOLD}Does this project call LLMs itself?${RESET} ${DIM}(Anthropic / OpenAI / LangChain etc.)${RESET}"
+  printf "  [y/${BOLD}N${RESET}]: "
+  read -r LLM_CHOICE
+  case "${LLM_CHOICE:-n}" in
+    y|Y|yes|YES) PROJECT_USES_LLM="yes" ;;
+    *)           PROJECT_USES_LLM="" ;;
+  esac
+
+  # Secret management
+  echo ""
+  echo -e "  ${BOLD}How are secrets managed?${RESET}"
+  echo -e "    1) .env (dotenv)   2) Platform env vars (Vercel / Railway etc.)"
+  echo -e "    3) HashiCorp Vault   4) AWS Secrets Manager / Parameter Store"
+  echo -e "    5) Doppler / Infisical   ${DIM}[Enter = skip]${RESET}"
+  printf "  Choice: "
+  read -r SECRETS_CHOICE
+  case "${SECRETS_CHOICE:-0}" in
+    1) PROJECT_SECRETS=".env file (dotenv) — must not be committed" ;;
+    2) PROJECT_SECRETS="Platform env vars" ;;
+    3) PROJECT_SECRETS="HashiCorp Vault" ;;
+    4) PROJECT_SECRETS="AWS Secrets Manager" ;;
+    5) PROJECT_SECRETS="Doppler / Infisical" ;;
+    *) PROJECT_SECRETS="" ;;
+  esac
 }
 
 # ─── Response-style wizard prompt ───
@@ -481,6 +653,32 @@ elif [ -f "Makefile" ] || [ -f "makefile" ]; then
   grep -q "^check:" "$MF" 2>/dev/null && CMD_TYPECHECK="make check"
 fi
 
+# ─── Orthogonal detection: codebase size ───
+# For >500 source files we nudge toward SocratiCode MCP (semantic search
+# over the graph). Cheap file count — bounded via `find -type f` with a
+# soft cap to avoid walking huge node_modules or vendor dirs.
+SOURCE_FILE_COUNT=0
+if command -v find >/dev/null 2>&1; then
+  SOURCE_FILE_COUNT=$(find . -type f \
+    \( -name "*.ts" -o -name "*.tsx" -o -name "*.js" -o -name "*.jsx" \
+       -o -name "*.py" -o -name "*.go" -o -name "*.rs" -o -name "*.java" \
+       -o -name "*.kt" -o -name "*.rb" -o -name "*.ex" -o -name "*.exs" \
+       -o -name "*.php" -o -name "*.cs" -o -name "*.swift" \) \
+    ! -path "./node_modules/*" ! -path "./.git/*" ! -path "./target/*" \
+    ! -path "./dist/*" ! -path "./build/*" ! -path "./vendor/*" \
+    ! -path "./.venv/*" ! -path "./venv/*" \
+    2>/dev/null | head -1001 | wc -l | tr -d ' ')
+fi
+LARGE_CODEBASE=false
+[ "${SOURCE_FILE_COUNT:-0}" -gt 500 ] 2>/dev/null && LARGE_CODEBASE=true
+
+# ─── Orthogonal detection: CODEOWNERS ───
+# Repos with ownership rules should signal reviewers to respect them.
+HAS_CODEOWNERS=false
+if [ -f "CODEOWNERS" ] || [ -f ".github/CODEOWNERS" ] || [ -f "docs/CODEOWNERS" ]; then
+  HAS_CODEOWNERS=true
+fi
+
 # ─── Orthogonal detection: monorepo markers ───
 # Monorepo is a flag, not a stack. Affects wording in Section 10 and
 # signals to reviewers that workspace-scoped commands may be needed.
@@ -540,6 +738,8 @@ if { [ "$DETECTED" = true ] && [ "$SKIP_WIZARD" = false ]; } || [ "$DRY_RUN" = t
   [ -n "${PY_FRAMEWORK:-}" ] && echo -e "    Framework:${BOLD} $PY_FRAMEWORK${RESET}"
   [ -n "$PKG_MGR" ] && echo -e "    Package:  ${BOLD}$PKG_MGR${RESET}"
   [ "$IS_MONOREPO" = true ] && echo -e "    Monorepo: ${BOLD}$MONOREPO_TOOL${RESET}"
+  [ "$HAS_CODEOWNERS" = true ] && echo -e "    Ownership:${BOLD} CODEOWNERS detected${RESET}"
+  [ "$LARGE_CODEBASE" = true ] && echo -e "    Size:     ${BOLD}${SOURCE_FILE_COUNT}+ source files${RESET} ${DIM}(consider SocratiCode MCP)${RESET}"
   [ -n "$CMD_DEV" ] && echo -e "    Dev:      ${DIM}$CMD_DEV${RESET}"
   [ -n "$CMD_TYPECHECK" ] && echo -e "    Typecheck:${DIM} $CMD_TYPECHECK${RESET}"
   [ -n "$CMD_LINT" ] && echo -e "    Lint:     ${DIM}$CMD_LINT${RESET}"
@@ -621,6 +821,27 @@ if [ "$DETECTED" = true ] && [ "$SKIP_WIZARD" = false ]; then
     echo -e "  ${DIM}  - all errors wrapped with context; no bare exceptions${RESET}"
     printf "  Conventions (optional): "
     read -r CONVENTIONS
+
+    # Optional substantive questions (DB, auth, deploy, LLM, secrets).
+    # Default N so the hot path stays fast for users mashing Enter.
+    echo ""
+    printf "  Answer 5 quick questions about DB / auth / deploy / secrets? ${DIM}(improves reviewer output)${RESET} [y/${BOLD}N${RESET}]: "
+    read -r ASK_EXTRAS
+    case "${ASK_EXTRAS:-n}" in
+      y|Y|yes|YES) CCK_ASK_EXTRAS=true; prompt_substantive_questions ;;
+    esac
+
+    # Optional advanced / power-user options. Default N.
+    if [ "$ADVANCED_FLAG" != true ]; then
+      echo ""
+      printf "  Customize advanced options (model, agents, MCP)? [y/${BOLD}N${RESET}]: "
+      read -r ASK_ADV
+      case "${ASK_ADV:-n}" in
+        y|Y|yes|YES) prompt_advanced_options ;;
+      esac
+    else
+      prompt_advanced_options
+    fi
 
     prompt_response_style
     echo ""
@@ -745,7 +966,27 @@ if [ "$DETECTED" = false ] && [ "$SKIP_WIZARD" = false ]; then
   printf "  Conventions (optional): "
   read -r CONVENTIONS
 
-  # 5. Response style
+  # 5. Optional substantive questions (same as detected-path)
+  echo ""
+  printf "  Answer 5 quick questions about DB / auth / deploy / secrets? ${DIM}(improves reviewer output)${RESET} [y/${BOLD}N${RESET}]: "
+  read -r ASK_EXTRAS
+  case "${ASK_EXTRAS:-n}" in
+    y|Y|yes|YES) CCK_ASK_EXTRAS=true; prompt_substantive_questions ;;
+  esac
+
+  # 6. Optional advanced / power-user options (same as detected-path).
+  if [ "$ADVANCED_FLAG" != true ]; then
+    echo ""
+    printf "  Customize advanced options (model, agents, MCP)? [y/${BOLD}N${RESET}]: "
+    read -r ASK_ADV
+    case "${ASK_ADV:-n}" in
+      y|Y|yes|YES) prompt_advanced_options ;;
+    esac
+  else
+    prompt_advanced_options
+  fi
+
+  # 7. Response style
   prompt_response_style
 
   echo ""
@@ -850,12 +1091,21 @@ else
   # .claude config (never overwrite)
   mkdir -p .claude
   copy_safe "$TMP_DIR/.claude/settings.json" ".claude/settings.json"
-  copy_safe "$TMP_DIR/.claude/mcp.json" ".claude/mcp.json"
+  if [ "$SKIP_MCP" = true ]; then
+    echo -e "  ${DIM}[SKIP]${RESET} .claude/mcp.json (advanced: --no-mcp)"
+  else
+    copy_safe "$TMP_DIR/.claude/mcp.json" ".claude/mcp.json"
+  fi
 
-  # Agents (individual, never overwrite)
+  # Agents (individual, never overwrite). Honour --skip-agents=a,b,c.
   mkdir -p .claude/agents
   for agent in "$TMP_DIR"/.claude/agents/*.md; do
     [ -f "$agent" ] || continue
+    agent_name=$(basename "$agent" .md)
+    if [ -n "$SKIP_AGENTS" ] && printf ',%s,' "$SKIP_AGENTS" | grep -qF ",${agent_name},"; then
+      echo -e "  ${DIM}[SKIP]${RESET} .claude/agents/${agent_name}.md (advanced: --skip-agents)"
+      continue
+    fi
     copy_safe "$agent" ".claude/agents/$(basename "$agent")"
   done
 
@@ -894,7 +1144,9 @@ fi
 # fixtures with the unpopulated template stubs. Now an empty install still
 # gets a minimal version-stamped section (just the heading + Architecture
 # placeholder + response-style block).
-if [ "$UPDATE_MODE" != true ] || [ "$RECONFIGURE_MODE" = true ]; then
+if [ "$SKIP_SECTION10" = true ]; then
+  echo -e "  ${DIM}[SKIP]${RESET} CLAUDE.md Project-Specific Configuration (advanced: --no-section)"
+elif [ "$UPDATE_MODE" != true ] || [ "$RECONFIGURE_MODE" = true ]; then
 
   # If a starter config was chosen, use it directly
   if [ -n "${USE_STARTER_CONFIG:-}" ] && [ -f "$USE_STARTER_CONFIG" ]; then
@@ -974,6 +1226,23 @@ if [ "$UPDATE_MODE" != true ] || [ "$RECONFIGURE_MODE" = true ]; then
   CONFIG_SECTION="$CONFIG_SECTION\n### Architecture\n<!-- Describe directory structure, module boundaries, data flow -->"
   fi  # end of else (non-starter config)
 
+  # Infrastructure + Ownership are appended to BOTH the starter and the
+  # auto-generated paths. Starter files don't know about the user's DB /
+  # auth / deploy answers, so these blocks must be added post-hoc.
+  if [ -n "$PROJECT_DB" ] || [ -n "$PROJECT_AUTH" ] || [ -n "$PROJECT_DEPLOY" ] || [ -n "$PROJECT_SECRETS" ] || [ -n "$PROJECT_USES_LLM" ]; then
+    CONFIG_SECTION="$CONFIG_SECTION\n\n### Infrastructure"
+    [ -n "$PROJECT_DB" ]      && CONFIG_SECTION="$CONFIG_SECTION\n- **Database:** $PROJECT_DB — reviewers should flag unparameterized queries and migration safety."
+    [ -n "$PROJECT_AUTH" ]    && CONFIG_SECTION="$CONFIG_SECTION\n- **Auth:** $PROJECT_AUTH — every protected route must verify identity; security-reviewer should audit session handling."
+    [ -n "$PROJECT_DEPLOY" ]  && CONFIG_SECTION="$CONFIG_SECTION\n- **Deployment:** $PROJECT_DEPLOY"
+    [ -n "$PROJECT_SECRETS" ] && CONFIG_SECTION="$CONFIG_SECTION\n- **Secrets:** $PROJECT_SECRETS — never commit secrets; never log them; never include them in error messages."
+    [ -n "$PROJECT_USES_LLM" ] && CONFIG_SECTION="$CONFIG_SECTION\n- **LLM integration:** this project calls LLMs. Wrap API keys as env vars, handle rate limits, and expect non-deterministic output in tests."
+    CONFIG_SECTION="$CONFIG_SECTION\n"
+  fi
+
+  if [ "$HAS_CODEOWNERS" = true ]; then
+    CONFIG_SECTION="$CONFIG_SECTION\n\n### Ownership\nThis repo has a CODEOWNERS file. Respect ownership rules when touching shared modules — verify the owning team signs off on cross-cutting changes.\n"
+  fi
+
   # Append response-style block (works for both starter and auto-gen paths —
   # real newlines are tolerated by both echo -e and printf '%s\n')
   STYLE_BLOCK=$(build_response_style_block)
@@ -989,6 +1258,38 @@ ${STYLE_BLOCK}"
   if [ -f "CLAUDE.md" ]; then
     # Match any "## N. Project-Specific Configuration" heading, capture N.
     SEC_HEADER=$(grep -n '^## [0-9]\{1,2\}\. Project-Specific Configuration' CLAUDE.md | head -1)
+
+    # W9 — smart merge: if CLAUDE.md exists but has no Project-Specific
+    # Configuration section, append one at the end instead of silently
+    # warning. Only runs on fresh installs + --reconfigure (not --update,
+    # which is already short-circuited above).
+    if [ -z "$SEC_HEADER" ]; then
+      # Guess the next section number. Find the highest existing `## N.`
+      # heading and add 1. Default to 11 if we can't parse any.
+      LAST_SEC_NUM=$(grep -oE '^## [0-9]+\.' CLAUDE.md | grep -oE '[0-9]+' | sort -n | tail -1)
+      if [ -n "$LAST_SEC_NUM" ]; then
+        NEW_SEC_NUM=$((LAST_SEC_NUM + 1))
+      else
+        NEW_SEC_NUM=11
+      fi
+      # Substitute the generated block's placeholder with the computed number.
+      CONFIG_SECTION=${CONFIG_SECTION//__SECNUM__/$NEW_SEC_NUM}
+      # Back up before any destructive write.
+      cp CLAUDE.md CLAUDE.md.bak 2>/dev/null || true
+      # Ensure trailing newline on the existing file, then append.
+      printf '\n' >> CLAUDE.md
+      if [ -n "${USE_STARTER_CONFIG:-}" ]; then
+        printf '%s\n' "$CONFIG_SECTION" >> CLAUDE.md
+      else
+        echo -e "$CONFIG_SECTION" >> CLAUDE.md
+      fi
+      printf '\n<!-- cck:wizard-schema=%s -->\n' "$WIZARD_SCHEMA_VERSION" >> CLAUDE.md
+      echo -e "  ${GREEN}[APPENDED]${RESET} CLAUDE.md §${NEW_SEC_NUM} (Project-Specific Configuration — no matching heading found, added at end; backup at CLAUDE.md.bak)"
+      SEC_HEADER=""  # skip the replacement block below
+    fi
+
+    # If the append path above ran, SEC_HEADER is empty and we're done.
+    # Otherwise, fall through to the replace-in-place logic.
     if [ -n "$SEC_HEADER" ]; then
       SECTION_LINE=$(printf '%s' "$SEC_HEADER" | cut -d: -f1)
       SECTION_NUM=$(printf '%s' "$SEC_HEADER" | sed -n 's/^[0-9]*:## \([0-9]\{1,2\}\)\..*/\1/p')
@@ -1042,9 +1343,18 @@ ${STYLE_BLOCK}"
           echo -e "  ${DIM}[SKIP]${RESET} CLAUDE.md §${SECTION_NUM} already customized"
         fi
       fi
-    else
-      echo -e "  ${YELLOW}[WARN]${RESET} Could not find 'Project-Specific Configuration' heading in CLAUDE.md"
     fi
+  fi
+
+  # Advanced: main session model override — replaces the default "opusplan".
+  if [ -n "$CUSTOM_MODEL" ] && [ -f ".claude/settings.json" ] && command -v python3 &>/dev/null; then
+    CCK_MODEL="$CUSTOM_MODEL" python3 -c "
+import json, os
+p = '.claude/settings.json'
+with open(p) as f: s = json.load(f)
+s['model'] = os.environ['CCK_MODEL']
+with open(p, 'w') as f: json.dump(s, f, indent=2); f.write('\n')
+" && echo -e "  ${GREEN}[CONFIGURED]${RESET} settings.json model → ${BOLD}${CUSTOM_MODEL}${RESET}"
   fi
 
   # Stack-specific settings.json updates
@@ -1171,19 +1481,78 @@ if [ -n "$STACK" ] && [ "$STACK" != "other" ]; then
 fi
 [ -n "$PKG_MGR" ]              && echo -e "    Package mgr:   ${BOLD}$PKG_MGR${RESET}"
 [ "$IS_MONOREPO" = true ]      && echo -e "    Monorepo:      ${BOLD}$MONOREPO_TOOL${RESET}"
+[ "$HAS_CODEOWNERS" = true ]   && echo -e "    Ownership:     ${BOLD}CODEOWNERS detected${RESET}"
+[ "$LARGE_CODEBASE" = true ]   && echo -e "    Codebase size: ${BOLD}${SOURCE_FILE_COUNT}+ source files${RESET}"
 [ -n "$CMD_DEV" ]              && echo -e "    Dev command:   ${DIM}$CMD_DEV${RESET}"
 [ -n "$CMD_TEST" ]             && echo -e "    Test command:  ${DIM}$CMD_TEST${RESET}"
 [ -n "$CMD_LINT" ]             && echo -e "    Lint command:  ${DIM}$CMD_LINT${RESET}"
 [ -n "$CMD_TYPECHECK" ]        && echo -e "    Typecheck:     ${DIM}$CMD_TYPECHECK${RESET}"
 [ -n "$RESPONSE_STYLE" ]       && echo -e "    Response style:${BOLD} $RESPONSE_STYLE${RESET}"
-echo -e "    Main model:    ${BOLD}opusplan${RESET} ${DIM}(Opus in plan mode, Sonnet in execution)${RESET}"
+SUMMARY_MODEL="${CUSTOM_MODEL:-opusplan}"
+case "$SUMMARY_MODEL" in
+  opusplan) SUMMARY_MODEL_NOTE="${DIM}(Opus in plan mode, Sonnet in execution)${RESET}" ;;
+  sonnet)   SUMMARY_MODEL_NOTE="${DIM}(Sonnet 4.6 — balanced)${RESET}" ;;
+  opus)     SUMMARY_MODEL_NOTE="${DIM}(Opus 4.6 — expensive)${RESET}" ;;
+  haiku)    SUMMARY_MODEL_NOTE="${DIM}(Haiku 4.5 — cheapest)${RESET}" ;;
+  *)        SUMMARY_MODEL_NOTE="" ;;
+esac
+echo -e "    Main model:    ${BOLD}${SUMMARY_MODEL}${RESET} ${SUMMARY_MODEL_NOTE}"
+
+# Stack-aware concrete example to seed the first turn. Picks a plausible
+# task tied to what we detected, instead of the generic "describe what you
+# want to build".
+TRY_EXAMPLE=""
+case "$STACK" in
+  node)
+    case "$NODE_FRAMEWORK" in
+      "Next.js")      TRY_EXAMPLE="add a /api/health route and a test" ;;
+      "Remix")        TRY_EXAMPLE="add a /health loader and a Vitest test" ;;
+      "SvelteKit")    TRY_EXAMPLE="add a /health +server.ts endpoint with a test" ;;
+      "Astro")        TRY_EXAMPLE="add a /health API route and a test" ;;
+      "Nuxt")         TRY_EXAMPLE="add a server/api/health.ts handler with a test" ;;
+      "Vite + React") TRY_EXAMPLE="add a HealthStatus component with a Vitest test" ;;
+      *)              TRY_EXAMPLE="add a typed utility with unit tests" ;;
+    esac
+    ;;
+  python)
+    case "${PY_FRAMEWORK:-}" in
+      fastapi) TRY_EXAMPLE="add a /health endpoint and a pytest test" ;;
+      django)  TRY_EXAMPLE="add a health view and a pytest-django test" ;;
+      flask)   TRY_EXAMPLE="add a /health route and a pytest test" ;;
+      llm)     TRY_EXAMPLE="wrap the LLM call with retries, tests, and an env-var key check" ;;
+      *)       TRY_EXAMPLE="add a pytest fixture and a unit test" ;;
+    esac
+    ;;
+  go)      TRY_EXAMPLE="add a /healthz handler and a table-driven test" ;;
+  rust)    TRY_EXAMPLE="add a CLI subcommand with clap + an integration test" ;;
+  deno)    TRY_EXAMPLE="add a Deno.serve handler and a Deno.test unit" ;;
+  bun)     TRY_EXAMPLE="add a Bun.serve handler and a bun test" ;;
+  elixir)  TRY_EXAMPLE="add a /health Phoenix controller and an ExUnit test" ;;
+  ruby)    TRY_EXAMPLE="add a /health Rails controller and an RSpec test" ;;
+  java|kotlin) TRY_EXAMPLE="add a /health controller and a JUnit test" ;;
+  dotnet)  TRY_EXAMPLE="add a /health endpoint and an xUnit test" ;;
+  php)     TRY_EXAMPLE="add a /health route and a PHPUnit test" ;;
+  *)       TRY_EXAMPLE="review the current codebase structure and suggest next steps" ;;
+esac
 
 echo ""
 echo -e "  ${BOLD}Get started:${RESET}"
-echo "    1. Run 'claude' to start a session"
-echo "    2. Just describe what you want to build — skip /onboard on a fresh install"
-echo "    3. Use /fix, /feature, /refactor, /research for task playbooks"
-echo "    4. Type /wrap-up when done to save session state"
+echo -e "    1. Run 'claude' to start a session"
+if [ -n "$TRY_EXAMPLE" ]; then
+  echo -e "    2. Try: ${DIM}\"${TRY_EXAMPLE}\"${RESET}"
+else
+  echo -e "    2. Just describe what you want to build — skip /onboard on a fresh install"
+fi
+echo -e "    3. Use /fix, /feature, /refactor, /research for task playbooks"
+echo -e "    4. Type /wrap-up when done to save session state"
+
+if [ "$LARGE_CODEBASE" = true ]; then
+  echo ""
+  echo -e "  ${CYAN}${BOLD}Large codebase detected${RESET} ${DIM}(${SOURCE_FILE_COUNT}+ source files)${RESET}"
+  echo -e "  Install SocratiCode MCP for semantic code search + dependency graphs:"
+  echo -e "    ${DIM}claude plugin marketplace add giancarloerra/socraticode${RESET}"
+  echo -e "    ${DIM}claude plugin install socraticode@socraticode${RESET}"
+fi
 echo ""
 echo -e "  ${YELLOW}★${RESET} ${BOLD}If this saves you time, star the repo:${RESET}"
 echo -e "    ${CYAN}https://github.com/codeverbojan/claude-code-kickstart${RESET}"

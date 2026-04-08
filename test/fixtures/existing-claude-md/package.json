@@ -1,0 +1,7 @@
+{
+  "name": "fixture-existing-claude-md",
+  "scripts": {
+    "dev": "node server.js",
+    "test": "vitest"
+  }
+}

@@ -309,6 +309,217 @@ fi
 cleanup "$DIR"
 echo ""
 
+# T-W9-APPEND: existing CLAUDE.md without Project-Specific Configuration
+# gets a new section appended (user content preserved, backup written)
+echo "${BOLD}T-W9-APPEND: existing CLAUDE.md → append new section${N}"
+DIR=$(run_setup existing-claude-md) || { echo "  setup failed"; cleanup "$DIR"; exit 1; }
+# Original content must survive
+if grep -q "UNIQUE_EXISTING_CONTENT_MARKER" "$DIR/CLAUDE.md"; then
+  pass "T-W9-APPEND: original content preserved"
+else
+  fail "T-W9-APPEND" "original CLAUDE.md content destroyed"
+fi
+# New section must be appended
+if grep -q "^## [0-9]\{1,2\}\. Project-Specific Configuration" "$DIR/CLAUDE.md"; then
+  pass "T-W9-APPEND: new Project-Specific Configuration section added"
+else
+  fail "T-W9-APPEND" "new section not appended to existing CLAUDE.md"
+fi
+# Version stamp present
+if grep -q "cck:wizard-schema=" "$DIR/CLAUDE.md"; then
+  pass "T-W9-APPEND: version stamp present on appended section"
+else
+  fail "T-W9-APPEND" "version stamp missing after append"
+fi
+# Backup written
+if [ -f "$DIR/CLAUDE.md.bak" ]; then
+  pass "T-W9-APPEND: CLAUDE.md.bak written for safety"
+else
+  fail "T-W9-APPEND" "no backup created"
+fi
+cleanup "$DIR"
+echo ""
+
+# T-ADV-MODEL: --model=sonnet overrides the settings.json model
+echo "${BOLD}T-ADV-MODEL: --model=sonnet overrides default${N}"
+TMP=$(mktemp -d)
+cp -R "$FIXTURES_DIR/python-fastapi"/* "$TMP"/
+bash "$SETUP" "$REPO_ROOT" "$TMP" --skip-wizard --model=sonnet >"$TMP/.log" 2>&1 || true
+if python3 -c "import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if d.get('model')=='sonnet' else 1)" "$TMP/.claude/settings.json" 2>/dev/null; then
+  pass "T-ADV-MODEL: settings.json model = sonnet"
+else
+  fail "T-ADV-MODEL" "settings.json model was not sonnet after --model=sonnet"
+fi
+# Summary line must reflect the overridden model (not hardcoded "opusplan").
+if grep -qE 'Main model:.*sonnet' "$TMP/.log" 2>/dev/null; then
+  pass "T-ADV-MODEL: summary line reflects --model override"
+else
+  fail "T-ADV-MODEL" "summary line still shows opusplan after --model=sonnet"
+fi
+cleanup "$TMP"
+echo ""
+
+# T-ADV-MODEL-INVALID: --model=foobar must be rejected, not silently written
+echo "${BOLD}T-ADV-MODEL-INVALID: reject unknown model${N}"
+TMP=$(mktemp -d)
+cp -R "$FIXTURES_DIR/python-fastapi"/* "$TMP"/
+bash "$SETUP" "$REPO_ROOT" "$TMP" --skip-wizard --model=foobar >"$TMP/.log" 2>&1 || true
+# settings.json must NOT have model=foobar. It should either be the default
+# opusplan or absent entirely — what matters is "not the garbage input".
+if python3 -c "import json,sys; d=json.load(open(sys.argv[1])); sys.exit(1 if d.get('model')=='foobar' else 0)" "$TMP/.claude/settings.json" 2>/dev/null; then
+  pass "T-ADV-MODEL-INVALID: foobar model was rejected"
+else
+  fail "T-ADV-MODEL-INVALID" "settings.json was written with bogus model"
+fi
+# A WARN line should have been printed
+if grep -q "unknown --model" "$TMP/.log"; then
+  pass "T-ADV-MODEL-INVALID: warn message shown"
+else
+  fail "T-ADV-MODEL-INVALID" "no warn message for invalid model"
+fi
+cleanup "$TMP"
+echo ""
+
+# T-ADV-SKIP-AGENTS: --skip-agents omits specific agent files
+echo "${BOLD}T-ADV-SKIP-AGENTS: --skip-agents=researcher,accessibility-reviewer${N}"
+TMP=$(mktemp -d)
+cp -R "$FIXTURES_DIR/python-fastapi"/* "$TMP"/
+bash "$SETUP" "$REPO_ROOT" "$TMP" --skip-wizard --skip-agents=researcher,accessibility-reviewer >"$TMP/.log" 2>&1 || true
+if [ ! -f "$TMP/.claude/agents/researcher.md" ]; then
+  pass "T-ADV-SKIP-AGENTS: researcher.md skipped"
+else
+  fail "T-ADV-SKIP-AGENTS" "researcher.md was installed despite --skip-agents"
+fi
+if [ ! -f "$TMP/.claude/agents/accessibility-reviewer.md" ]; then
+  pass "T-ADV-SKIP-AGENTS: accessibility-reviewer.md skipped"
+else
+  fail "T-ADV-SKIP-AGENTS" "accessibility-reviewer.md was installed despite --skip-agents"
+fi
+# Code-reviewer must NOT be skipped
+if [ -f "$TMP/.claude/agents/code-reviewer.md" ]; then
+  pass "T-ADV-SKIP-AGENTS: code-reviewer.md still installed"
+else
+  fail "T-ADV-SKIP-AGENTS" "code-reviewer.md was skipped (should be present)"
+fi
+cleanup "$TMP"
+echo ""
+
+# T-ADV-NO-MCP: --no-mcp skips .claude/mcp.json
+echo "${BOLD}T-ADV-NO-MCP: --no-mcp skips MCP config${N}"
+TMP=$(mktemp -d)
+cp -R "$FIXTURES_DIR/python-fastapi"/* "$TMP"/
+bash "$SETUP" "$REPO_ROOT" "$TMP" --skip-wizard --no-mcp >"$TMP/.log" 2>&1 || true
+if [ ! -f "$TMP/.claude/mcp.json" ]; then
+  pass "T-ADV-NO-MCP: mcp.json skipped"
+else
+  fail "T-ADV-NO-MCP" "mcp.json was installed despite --no-mcp"
+fi
+cleanup "$TMP"
+echo ""
+
+# T-ADV-NO-SECTION: --no-section skips CLAUDE.md Section replacement
+echo "${BOLD}T-ADV-NO-SECTION: --no-section leaves CLAUDE.md stubs${N}"
+TMP=$(mktemp -d)
+cp -R "$FIXTURES_DIR/python-fastapi"/* "$TMP"/
+bash "$SETUP" "$REPO_ROOT" "$TMP" --skip-wizard --no-section >"$TMP/.log" 2>&1 || true
+# Section should remain unreplaced — stubs intact
+if grep -q '<!-- Example:' "$TMP/CLAUDE.md" 2>/dev/null; then
+  pass "T-ADV-NO-SECTION: template stubs preserved"
+else
+  fail "T-ADV-NO-SECTION" "--no-section did NOT preserve template stubs"
+fi
+cleanup "$TMP"
+echo ""
+
+# T-EXTRAS: substantive questions (DB/auth/deploy/LLM/secrets) populate Infrastructure
+# Scripted via stdin — mimics a user answering: Y (look right), Y (starter),
+# <blank> conventions, Y (extras), 1 (Postgres), 2 (Clerk), 1 (Vercel), y (LLM),
+# 1 (.env), <blank> response style.
+echo "${BOLD}T-EXTRAS: substantive questions populate Infrastructure block${N}"
+TMP=$(mktemp -d)
+cp -R "$FIXTURES_DIR/python-fastapi"/* "$TMP"/
+# Interactive run, but from a fixture with detection → skips to confirm prompt.
+# We need Y (look right?), <blank> or Y (starter?), <blank> (conventions),
+# y (quick questions?), then the 5 extras answers, then <blank> (style).
+printf 'Y\nY\n\ny\n1\n2\n1\ny\n1\n\n\n' | bash "$SETUP" "$REPO_ROOT" "$TMP" >"$TMP/.log" 2>&1 || true
+if grep -q "### Infrastructure" "$TMP/CLAUDE.md" 2>/dev/null; then
+  pass "T-EXTRAS: Infrastructure section present"
+else
+  fail "T-EXTRAS" "Infrastructure section missing"
+  tail -30 "$TMP/.log" >&2
+fi
+# Match the exact Infrastructure-block format so the FastAPI starter's
+# unrelated "Postgres" mention can't cause a false-positive.
+if grep -q '\*\*Database:\*\* Postgres' "$TMP/CLAUDE.md" 2>/dev/null; then
+  pass "T-EXTRAS: Postgres DB captured in Infrastructure"
+else
+  fail "T-EXTRAS" "Postgres Database line not in Infrastructure block"
+fi
+if grep -q '\*\*Auth:\*\* Clerk' "$TMP/CLAUDE.md" 2>/dev/null; then
+  pass "T-EXTRAS: Clerk auth captured"
+else
+  fail "T-EXTRAS" "Clerk auth line not in Infrastructure block"
+fi
+if grep -q '\*\*Deployment:\*\* Vercel' "$TMP/CLAUDE.md" 2>/dev/null; then
+  pass "T-EXTRAS: Vercel deploy captured"
+else
+  fail "T-EXTRAS" "Vercel deploy line not in Infrastructure block"
+fi
+if grep -q "LLM integration" "$TMP/CLAUDE.md" 2>/dev/null; then
+  pass "T-EXTRAS: LLM-usage note captured"
+else
+  fail "T-EXTRAS" "LLM integration note missing"
+fi
+cleanup "$TMP"
+echo ""
+
+# T-EXTRAS-OFF: defaulting N to the "quick questions" toggle produces no Infrastructure
+echo "${BOLD}T-EXTRAS-OFF: declining extras skips Infrastructure${N}"
+TMP=$(mktemp -d)
+cp -R "$FIXTURES_DIR/python-fastapi"/* "$TMP"/
+# Y confirm, Y starter, <blank> conventions, <blank> (default N extras), <blank> style
+printf 'Y\nY\n\n\n\n\n' | bash "$SETUP" "$REPO_ROOT" "$TMP" >"$TMP/.log" 2>&1 || true
+if grep -q "### Infrastructure" "$TMP/CLAUDE.md" 2>/dev/null; then
+  fail "T-EXTRAS-OFF" "Infrastructure section appeared when user declined extras"
+else
+  pass "T-EXTRAS-OFF: no Infrastructure section when extras declined"
+fi
+cleanup "$TMP"
+echo ""
+
+# T-CODEOWNERS: CODEOWNERS detection adds ownership section
+echo "${BOLD}T-CODEOWNERS: CODEOWNERS → ownership note${N}"
+DIR=$(run_setup with-codeowners) || { echo "  setup failed"; cleanup "$DIR"; exit 1; }
+assert_section_replaced "T-CODEOWNERS" "$DIR"
+assert_contains "T-CODEOWNERS" "$DIR" "CLAUDE.md" "### Ownership"
+assert_contains "T-CODEOWNERS" "$DIR" "CLAUDE.md" "CODEOWNERS"
+cleanup "$DIR"
+echo ""
+
+# T-TRY-EXAMPLE: post-install message shows a stack-aware concrete suggestion
+echo "${BOLD}T-TRY-EXAMPLE: stack-aware 'Try:' in post-install${N}"
+TMP=$(mktemp -d)
+cp -R "$FIXTURES_DIR/python-fastapi"/* "$TMP"/
+bash "$SETUP" "$REPO_ROOT" "$TMP" --skip-wizard >"$TMP/.log" 2>&1 || true
+if grep -q 'Try:' "$TMP/.log" && grep -q 'health' "$TMP/.log"; then
+  pass "T-TRY-EXAMPLE: FastAPI-specific /health example shown"
+else
+  fail "T-TRY-EXAMPLE" "expected 'Try: ... health' in install log"
+  grep -A1 "Get started" "$TMP/.log" >&2 || true
+fi
+cleanup "$TMP"
+
+TMP=$(mktemp -d)
+cp -R "$FIXTURES_DIR/rust-cli"/* "$TMP"/
+bash "$SETUP" "$REPO_ROOT" "$TMP" --skip-wizard >"$TMP/.log" 2>&1 || true
+if grep -q 'Try:' "$TMP/.log" && grep -q 'clap' "$TMP/.log"; then
+  pass "T-TRY-EXAMPLE: Rust-specific clap example shown"
+else
+  fail "T-TRY-EXAMPLE" "expected 'Try: ... clap' in install log"
+fi
+cleanup "$TMP"
+echo ""
+
 # T-EMPTY-SECTION: empty fixture must still get a populated section
 # (no <!-- Example: stubs) — the reviewer caught this was previously silent.
 echo "${BOLD}T-EMPTY-SECTION: empty fixture gets replaced section${N}"
