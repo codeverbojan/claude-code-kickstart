@@ -47,10 +47,10 @@ $ARGUMENTS
 
 ### New Starter Config
 
-Create `starters/your-stack.md`:
+Create `starters/your-stack.md`. The section heading uses a placeholder — the installer substitutes the real number at install time (CLAUDE.md renumbering is handled dynamically):
 
 ```markdown
-## 10. Project-Specific Configuration
+## __SECNUM__. Project-Specific Configuration
 
 ### Stack
 [Framework + language]

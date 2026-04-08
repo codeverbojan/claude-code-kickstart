@@ -34,6 +34,21 @@
 
 Main session default: `opusplan` (Opus in plan mode, Sonnet during execution).
 
+## Installer Flags
+
+| Flag | Purpose |
+|---|---|
+| `--skip-wizard` | Non-interactive; auto-detect only |
+| `--update` | Refresh template files; preserve config; warn on stale schema |
+| `--reconfigure` | Re-run wizard against existing install |
+| `--dry-run` / `--preview` | Show what would be written; touch no files |
+| `--style=concise\|balanced\|beginner` | Non-interactive response-style |
+| `--advanced` | Unlock power-user menu |
+| `--model=opusplan\|sonnet\|opus\|haiku` | Main session model override |
+| `--no-mcp` | Skip .claude/mcp.json |
+| `--no-section` | Skip CLAUDE.md Section 10/11 replacement |
+| `--skip-agents=a,b,c` | Omit specific sub-agents |
+
 ## Session Flow
 
 ```
