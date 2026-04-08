@@ -165,6 +165,11 @@ STYLE_EOF
 # Validates detected/user-supplied command strings. First token is the
 # binary name (or `./bin/foo` — local paths are skipped). Non-fatal: just
 # prints a warning so the user knows Claude may hit a missing tool.
+#
+# The allow-list is deliberately broad: every tool the wizard may suggest
+# is considered "plausibly installed later" and we don't warn about it.
+# The warning only fires for genuinely unexpected binaries — typically
+# from user-supplied custom commands in the manual wizard.
 validate_command() {
   local label="$1"
   local cmd="$2"
@@ -173,7 +178,30 @@ validate_command() {
   bin=$(printf '%s' "$cmd" | awk '{print $1}')
   case "$bin" in
     ./*|/*|../*) return ;;  # explicit local path — don't check PATH
-    make|npm|npx|pnpm|yarn|bun|deno|go|cargo|python|python3|pip|pytest|ruff|mypy|uv|poetry|flask|gradle|mvn|dotnet|php|bundle|mix|iex) ;; # allow through even if not installed — user may install later
+    # Stack-level runners
+    make|gmake|just) return ;;
+    # Node ecosystem
+    node|npm|npx|pnpm|yarn|bun|deno|corepack) return ;;
+    # Python ecosystem
+    python|python3|pip|pip3|pipx|poetry|uv|pipenv|pytest|ruff|mypy|pyright|black|flake8|flask|uvicorn|gunicorn|django-admin|celery) return ;;
+    # Go ecosystem
+    go|gofmt|goimports|golangci-lint|staticcheck|dlv|air) return ;;
+    # Rust ecosystem
+    cargo|rustc|rustup|rustfmt|clippy-driver) return ;;
+    # JVM (Java/Kotlin/Scala)
+    java|javac|mvn|gradle|./gradlew|kotlin|kotlinc|sbt) return ;;
+    # .NET
+    dotnet|nuget|msbuild) return ;;
+    # Ruby
+    ruby|bundle|bundler|rake|rspec|rubocop|irb|rails|./bin/rails) return ;;
+    # Elixir
+    mix|iex|elixir|erl) return ;;
+    # PHP
+    php|composer|artisan|phpstan|phpcs|phpunit|symfony) return ;;
+    # Test/build runners commonly shelled out to
+    vitest|jest|playwright|cypress|mocha|tsc|esbuild|turbo|nx|vite|webpack|rollup) return ;;
+    # Infra
+    docker|docker-compose|podman|kubectl|terraform) return ;;
   esac
   if ! command -v "$bin" >/dev/null 2>&1; then
     echo -e "  ${YELLOW}[WARN]${RESET} ${label}: \`${bin}\` not found on PATH (configure it later or ignore)"
@@ -181,15 +209,18 @@ validate_command() {
 }
 
 # ─── Read a JSON key from package.json (no jq dependency) ───
+# Pass the key via env var instead of interpolating into the Python source —
+# prevents any future caller from accidentally enabling a script-injection
+# path if the key ever comes from untrusted input.
 pkg_script() {
   local key="$1"
-  python3 -c "
-import json, sys
+  CCK_KEY="$key" python3 -c "
+import json, os
 try:
     d = json.load(open('package.json'))
-    v = d.get('scripts', {}).get('$key', '')
-    print(v)
-except: pass
+    print(d.get('scripts', {}).get(os.environ.get('CCK_KEY', ''), ''))
+except Exception:
+    pass
 " 2>/dev/null
 }
 
@@ -858,7 +889,12 @@ fi
 
 # ─── Configure from detection / wizard answers (skip in update mode) ───
 
-if { [ "$UPDATE_MODE" != true ] || [ "$RECONFIGURE_MODE" = true ]; } && { [ -n "$CMD_DEV" ] || [ -n "$CMD_TEST" ] || [ -n "$CONVENTIONS" ] || [ -n "${USE_STARTER_CONFIG:-}" ]; }; then
+# Run the configure block on any fresh install or explicit --reconfigure.
+# Previously required at least one detected command — but that left empty
+# fixtures with the unpopulated template stubs. Now an empty install still
+# gets a minimal version-stamped section (just the heading + Architecture
+# placeholder + response-style block).
+if [ "$UPDATE_MODE" != true ] || [ "$RECONFIGURE_MODE" = true ]; then
 
   # If a starter config was chosen, use it directly
   if [ -n "${USE_STARTER_CONFIG:-}" ] && [ -f "$USE_STARTER_CONFIG" ]; then
@@ -956,27 +992,55 @@ ${STYLE_BLOCK}"
     if [ -n "$SEC_HEADER" ]; then
       SECTION_LINE=$(printf '%s' "$SEC_HEADER" | cut -d: -f1)
       SECTION_NUM=$(printf '%s' "$SEC_HEADER" | sed -n 's/^[0-9]*:## \([0-9]\{1,2\}\)\..*/\1/p')
-      # Substitute the placeholder in the generated block with the real number.
-      CONFIG_SECTION=${CONFIG_SECTION//__SECNUM__/$SECTION_NUM}
 
-      # Allow replacement when:
-      #   - the section still has template stubs (fresh install), OR
-      #   - we're explicitly in --reconfigure mode (user asked to regenerate)
-      if [ "$RECONFIGURE_MODE" = true ] || grep -q "<!-- Example:" CLAUDE.md 2>/dev/null || grep -q "<!-- Describe directory" CLAUDE.md 2>/dev/null; then
-        head -n $((SECTION_LINE - 1)) CLAUDE.md > CLAUDE.md.tmp
-        if [ -n "${USE_STARTER_CONFIG:-}" ]; then
-          # Starter content has real newlines from cat — use printf to avoid escape corruption
-          printf '%s\n' "$CONFIG_SECTION" >> CLAUDE.md.tmp
-        else
-          # Auto-generated content uses \n literals — needs echo -e
-          echo -e "$CONFIG_SECTION" >> CLAUDE.md.tmp
-        fi
-        # Version-stamp so `--update` can detect stale wizard output.
-        printf '\n<!-- cck:wizard-schema=%s -->\n' "$WIZARD_SCHEMA_VERSION" >> CLAUDE.md.tmp
-        mv CLAUDE.md.tmp CLAUDE.md
-        echo -e "  ${GREEN}[CONFIGURED]${RESET} CLAUDE.md §${SECTION_NUM} (Project-Specific Configuration)"
+      # Guard against a broken sed regex silently producing empty output,
+      # which would write "## . Project-Specific Configuration" to CLAUDE.md.
+      if [ -z "$SECTION_NUM" ]; then
+        echo -e "  ${YELLOW}[WARN]${RESET} Could not parse section number from heading — skipping replacement"
       else
-        echo -e "  ${DIM}[SKIP]${RESET} CLAUDE.md §${SECTION_NUM} already customized"
+        # Substitute the placeholder in the generated block with the real number.
+        CONFIG_SECTION=${CONFIG_SECTION//__SECNUM__/$SECTION_NUM}
+
+        # Allow replacement when:
+        #   - the section still has template stubs (fresh install), OR
+        #   - we're explicitly in --reconfigure mode (user asked to regenerate)
+        if [ "$RECONFIGURE_MODE" = true ] || grep -q "<!-- Example:" CLAUDE.md 2>/dev/null || grep -q "<!-- Describe directory" CLAUDE.md 2>/dev/null; then
+          # Find the END of the target section: the next `^## ` heading after
+          # SECTION_LINE. Everything from SECTION_LINE up to (but not including)
+          # that next heading is what we replace. Content after the next
+          # heading is preserved — the previous implementation silently
+          # truncated all subsequent sections, destroying any user-added
+          # sections past Project-Specific Configuration.
+          NEXT_REL=$(tail -n +$((SECTION_LINE + 1)) CLAUDE.md | grep -n '^## ' | head -1 | cut -d: -f1)
+          if [ -n "$NEXT_REL" ]; then
+            END_LINE=$(( SECTION_LINE + NEXT_REL ))
+          else
+            END_LINE=""  # target section runs to EOF
+          fi
+
+          # Safety backup — destructive write, one chance to recover.
+          cp CLAUDE.md CLAUDE.md.bak 2>/dev/null || true
+
+          head -n $((SECTION_LINE - 1)) CLAUDE.md > CLAUDE.md.tmp
+          if [ -n "${USE_STARTER_CONFIG:-}" ]; then
+            # Starter content has real newlines from cat — use printf to avoid escape corruption
+            printf '%s\n' "$CONFIG_SECTION" >> CLAUDE.md.tmp
+          else
+            # Auto-generated content uses \n literals — needs echo -e
+            echo -e "$CONFIG_SECTION" >> CLAUDE.md.tmp
+          fi
+          # Version-stamp so `--update` can detect stale wizard output.
+          printf '\n<!-- cck:wizard-schema=%s -->\n' "$WIZARD_SCHEMA_VERSION" >> CLAUDE.md.tmp
+          # Re-attach any content after the target section.
+          if [ -n "$END_LINE" ]; then
+            printf '\n' >> CLAUDE.md.tmp
+            tail -n +"$END_LINE" CLAUDE.md >> CLAUDE.md.tmp
+          fi
+          mv CLAUDE.md.tmp CLAUDE.md
+          echo -e "  ${GREEN}[CONFIGURED]${RESET} CLAUDE.md §${SECTION_NUM} (Project-Specific Configuration)"
+        else
+          echo -e "  ${DIM}[SKIP]${RESET} CLAUDE.md §${SECTION_NUM} already customized"
+        fi
       fi
     else
       echo -e "  ${YELLOW}[WARN]${RESET} Could not find 'Project-Specific Configuration' heading in CLAUDE.md"
@@ -1125,5 +1189,31 @@ echo -e "  ${YELLOW}★${RESET} ${BOLD}If this saves you time, star the repo:${R
 echo -e "    ${CYAN}https://github.com/codeverbojan/claude-code-kickstart${RESET}"
 echo ""
 
-# Cleanup temp dir (install.sh's trap doesn't fire after exec)
-[ -d "$TMP_DIR" ] && [[ "$TMP_DIR" == /tmp/* || "$TMP_DIR" == /var/folders/* ]] && rm -rf "$TMP_DIR" || true
+# Cleanup temp dir (install.sh's trap doesn't fire after exec).
+# Path validation: the prefix check alone is bypassable via "../" traversal
+# (e.g. /tmp/../home/user). Resolve to an absolute canonical path first and
+# re-check, then use `rm -rf --` to block leading-dash names and avoid
+# following symlinks at the top level via the check-then-rm pattern.
+cleanup_tmp_dir() {
+  local raw="$1"
+  [ -z "$raw" ] && return
+  [ -d "$raw" ] || return
+  local resolved
+  if command -v realpath >/dev/null 2>&1; then
+    resolved=$(realpath "$raw" 2>/dev/null) || return
+  elif command -v python3 >/dev/null 2>&1; then
+    resolved=$(python3 -c "import os,sys; print(os.path.realpath(sys.argv[1]))" "$raw" 2>/dev/null) || return
+  else
+    # No resolver — bail rather than trust the raw path.
+    return
+  fi
+  case "$resolved" in
+    /tmp/*|/var/folders/*|/private/tmp/*|/private/var/folders/*)
+      # Final guard: must still be a directory after resolution, and
+      # not a symlink at the top level (realpath dereferenced it already,
+      # so -h check catches the case where resolved points back to a link).
+      [ -d "$resolved" ] && [ ! -L "$resolved" ] && rm -rf -- "$resolved"
+      ;;
+  esac
+}
+cleanup_tmp_dir "$TMP_DIR" || true

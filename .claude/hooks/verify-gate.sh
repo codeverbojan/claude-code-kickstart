@@ -58,12 +58,21 @@ try:
             line = line.strip()
             if not line:
                 continue
+            # Skip implausibly large transcript lines (>512 KB) — a Stop hook
+            # that parses multi-MB jsonl on every turn would hang sessions.
+            if len(line) > 524288:
+                continue
             try:
                 entries.append(json.loads(line))
             except Exception:
                 pass
 except Exception:
     sys.exit(0)
+
+# Cap recursion in case the transcript has pathologically deep nesting.
+sys.setrecursionlimit(2000)
+MAX_DEPTH = 40
+MAX_PATHS = 50
 
 # Find the index of the most recent user message (role=user).
 # Transcript entries vary in shape; check both top-level "role" and nested "message.role".
@@ -87,21 +96,33 @@ current_turn = entries[last_user_idx + 1:] if last_user_idx >= 0 else entries
 EDIT_TOOLS = ('Edit', 'Write', 'MultiEdit', 'NotebookEdit')
 paths = []
 
-def walk(x):
+def walk(x, depth=0):
+    if depth > MAX_DEPTH:
+        return
+    if len(paths) >= MAX_PATHS:
+        return
     if isinstance(x, dict):
         if x.get('type') == 'tool_use' and x.get('name') in EDIT_TOOLS:
             inp = x.get('input') or {}
             p = inp.get('file_path') or inp.get('notebook_path')
             if p:
                 paths.append(p)
+                if len(paths) >= MAX_PATHS:
+                    return
         for v in x.values():
-            walk(v)
+            walk(v, depth + 1)
+            if len(paths) >= MAX_PATHS:
+                return
     elif isinstance(x, list):
         for v in x:
-            walk(v)
+            walk(v, depth + 1)
+            if len(paths) >= MAX_PATHS:
+                return
 
 for e in current_turn:
     walk(e)
+    if len(paths) >= MAX_PATHS:
+        break
 
 print('\n'.join(paths))
 PY

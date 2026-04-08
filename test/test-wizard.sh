@@ -259,14 +259,62 @@ echo "${BOLD}T-UPD: --update warns when wizard schema is stale${N}"
 DIR=$(run_setup python-fastapi) || { echo "  setup failed"; cleanup "$DIR"; exit 1; }
 # Strip the version stamp to simulate a v1 install.
 sed -i.bak '/cck:wizard-schema=/d' "$DIR/CLAUDE.md" && rm -f "$DIR/CLAUDE.md.bak"
-# Run update and capture output.
-bash "$SETUP" "$REPO_ROOT" "$DIR" --update >"$DIR/.upd.log" 2>&1 || true
-if grep -q "wizard schema" "$DIR/.upd.log"; then
+# Run update. Capture exit code — a crash must not false-pass the test.
+if bash "$SETUP" "$REPO_ROOT" "$DIR" --update >"$DIR/.upd.log" 2>&1; then
+  UPD_EXIT=0
+else
+  UPD_EXIT=$?
+fi
+if [ "$UPD_EXIT" != "0" ]; then
+  fail "T-UPD" "--update exited non-zero ($UPD_EXIT)"
+  cat "$DIR/.upd.log" >&2
+elif grep -q "wizard schema" "$DIR/.upd.log"; then
   pass "T-UPD: --update warned about stale wizard schema"
 else
   fail "T-UPD" "--update did not warn about stale schema (log below)"
   cat "$DIR/.upd.log" >&2
 fi
+cleanup "$DIR"
+echo ""
+
+# T-RC-PRESERVE: --reconfigure preserves content after the target section.
+# Regression test for the data-loss bug found in code review.
+echo "${BOLD}T-RC-PRESERVE: --reconfigure keeps sections after project-config${N}"
+DIR=$(run_setup python-fastapi) || { echo "  setup failed"; cleanup "$DIR"; exit 1; }
+# Append a fake user-added section AFTER the project-config section.
+cat >> "$DIR/CLAUDE.md" <<'TAIL'
+
+## 99. User-added Testing Strategy
+
+- Every PR must run the full suite before merge.
+- Integration tests use real Postgres.
+- UNIQUE_PHRASE_FOR_ASSERT_2026
+TAIL
+# Reconfigure and check the user section survived.
+if bash "$SETUP" "$REPO_ROOT" "$DIR" --reconfigure --skip-wizard >"$DIR/.recfg.log" 2>&1; then
+  if grep -q "UNIQUE_PHRASE_FOR_ASSERT_2026" "$DIR/CLAUDE.md"; then
+    pass "T-RC-PRESERVE: user-added section survived --reconfigure"
+  else
+    fail "T-RC-PRESERVE" "--reconfigure DESTROYED the user-added section (data loss)"
+  fi
+  if grep -q "User-added Testing Strategy" "$DIR/CLAUDE.md"; then
+    pass "T-RC-PRESERVE: user section heading preserved"
+  else
+    fail "T-RC-PRESERVE" "user section heading lost"
+  fi
+else
+  fail "T-RC-PRESERVE" "--reconfigure exited non-zero"
+  cat "$DIR/.recfg.log" >&2
+fi
+cleanup "$DIR"
+echo ""
+
+# T-EMPTY-SECTION: empty fixture must still get a populated section
+# (no <!-- Example: stubs) — the reviewer caught this was previously silent.
+echo "${BOLD}T-EMPTY-SECTION: empty fixture gets replaced section${N}"
+DIR=$(run_setup empty) || { echo "  setup failed"; cleanup "$DIR"; exit 1; }
+assert_section_replaced "T-EMPTY-SECTION" "$DIR"
+assert_contains "T-EMPTY-SECTION" "$DIR" "CLAUDE.md" "cck:wizard-schema="
 cleanup "$DIR"
 echo ""
 

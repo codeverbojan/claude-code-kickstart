@@ -20,42 +20,60 @@ fi
 
 # Session-scoped tips file — keyed on the Claude Code session_id so tips
 # reset naturally between sessions. Falls back to a per-project-per-day key
-# if session_id is missing (won't happen in real Claude Code invocations).
+# if session_id is missing.
 #
-# The previous implementation used a /tmp path with a project hash that
-# evaluated to empty on macOS (md5sum absent, pipe to cut masked the exit
-# code, fallback never fired). Result: every project shared one tips file
-# globally and tips never reset across sessions.
+# Path traversal guard: sanitise any characters that could escape the
+# tips dir. Claude Code session_ids are UUIDs in practice, but the grep
+# fallback on line 18 could pick up a malformed value if the hook payload
+# is ever hand-crafted.
 if [ -n "$SESSION_ID" ]; then
-  TIPS_KEY="$SESSION_ID"
+  TIPS_KEY=$(printf '%s' "$SESSION_ID" | tr -cd 'a-zA-Z0-9_-')
 else
   PROJ_KEY=$(basename "$PROJECT_DIR" | tr -cd 'a-zA-Z0-9')
   DAY_KEY=$(date +%Y%m%d 2>/dev/null || echo default)
   TIPS_KEY="${PROJ_KEY:-default}-${DAY_KEY}"
 fi
-TIPS_SHOWN="${TMPDIR:-/tmp}/claude-tips-${TIPS_KEY}"
+[ -z "$TIPS_KEY" ] && TIPS_KEY="default"
+# Per-uid subdir so a shared-host symlink race can't plant the tips file
+# pointing at another user's file.
+TIPS_DIR="${TMPDIR:-/tmp}/claude-tips-$(id -u 2>/dev/null || echo 0)"
+mkdir -p "$TIPS_DIR" 2>/dev/null
+chmod 700 "$TIPS_DIR" 2>/dev/null
+TIPS_SHOWN="$TIPS_DIR/${TIPS_KEY}"
 
 # Lowercase for matching
 PROMPT_LOWER=$(printf '%s' "$PROMPT" | tr '[:upper:]' '[:lower:]')
 
 [ -z "$PROMPT_LOWER" ] && exit 0
 
-# Helper: show tip only once per session per category
+# Helper: show tip only once per session per category.
+#
+# Renders the JSON response via python3 so any future tip text containing
+# quotes or backslashes produces valid JSON rather than corrupting the
+# hook response.
 show_tip() {
   local category="$1"
   local message="$2"
 
   # Check if already shown this session
-  touch "$TIPS_SHOWN"
+  touch "$TIPS_SHOWN" 2>/dev/null
   if grep -q "^${category}$" "$TIPS_SHOWN" 2>/dev/null; then
     return
   fi
 
   # Mark as shown
-  echo "$category" >> "$TIPS_SHOWN"
+  echo "$category" >> "$TIPS_SHOWN" 2>/dev/null
 
-  # Return systemMessage (shown to user, not Claude)
-  printf '{"systemMessage":"%s"}' "$message"
+  # Emit JSON — prefer python3 for correct escaping, fall back to printf.
+  if command -v python3 >/dev/null 2>&1; then
+    MSG="$message" python3 -c "
+import os, json
+print(json.dumps({'systemMessage': os.environ.get('MSG', '')}))
+" 2>/dev/null
+  else
+    printf '{"systemMessage":"%s"}' "$message"
+    echo
+  fi
   exit 0
 }
 
