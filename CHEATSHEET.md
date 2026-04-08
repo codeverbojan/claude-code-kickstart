@@ -4,8 +4,8 @@
 
 | Command | Purpose |
 |---------|---------|
-| `/onboard` | Status check — read primer + gotchas, report, wait for instructions |
-| `/onboard deep` | Full onboard — explore project, check health, deep report |
+| `/onboard` | Status mode — 3-line git + next-steps report (primer already auto-loaded) |
+| `/onboard deep` | Full onboard — non-stub gotchas/patterns/decisions + project explore |
 | `/onboard <task>` | Light onboard — focused on a specific task, start immediately |
 | `/wrap-up` | End session — structured handoff to primer.md |
 | `/reset` | Wrap up + clear context + deep onboard (fresh start) |
@@ -28,19 +28,21 @@
 |-------|-------|------|
 | `code-reviewer` | Sonnet | After code changes |
 | `security-reviewer` | Opus | API routes, auth, inputs |
-| `accessibility-reviewer` | Sonnet | UI components |
-| `test-runner` | Sonnet | Before commits |
-| `researcher` | Sonnet | Investigation tasks |
+| `accessibility-reviewer` | Haiku | UI components |
+| `test-runner` | Haiku | Before commits |
+| `researcher` | Haiku | Investigation tasks |
+
+Main session default: `opusplan` (Opus in plan mode, Sonnet during execution).
 
 ## Session Flow
 
 ```
-/onboard           → status → wait for task         (start of session)
-/onboard <task>    → light context → start working   (focused work)
-/onboard deep      → full context → plan → build     (major work)
-/fix "bug desc"    → trace → fix → verify            (bug fix)
-/research "topic"  → search → synthesize → report    (no code)
-... work ...       → /test → /wrap-up                (end of session)
+<fresh install>    → just describe the task              (primer already loaded)
+/onboard <task>    → light context → start working       (focused work)
+/onboard deep      → full context → plan → build         (major work, once memory has content)
+/fix "bug desc"    → trace → fix → verify                (bug fix)
+/research "topic"  → search → synthesize → report        (no code)
+... work ...       → /test → /wrap-up                    (end of session)
 ```
 
 ## Context Management
@@ -49,7 +51,7 @@
 |-----------|--------|
 | New unrelated task | `/clear` |
 | Context degrading | `/compact` |
-| After 10+ messages | Re-read files before editing |
+| Editing a file you haven't touched recently | Re-read it first (Edit fails silently on stale content) |
 | Long research | Delegate to `researcher` agent |
 | 5+ independent files | Launch parallel sub-agents |
 | End of session | `/wrap-up` |

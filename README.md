@@ -109,7 +109,7 @@ To fine-tune later, run `/init` or `/learn` inside Claude Code, or edit `CLAUDE.
 claude
 ```
 
-Session hook auto-loads `primer.md`, `gotchas.md`, `patterns.md`, `decisions.md`, and shows git commits since the last session.
+Session hook auto-loads `primer.md` plus any of `gotchas.md`, `patterns.md`, `decisions.md` that have real content (template stubs are skipped), and shows git commits since the last session.
 
 ### 3. Pick a workflow
 
@@ -214,21 +214,26 @@ your-project/
 |-------|-------|-----------|
 | `code-reviewer` | Sonnet | After code changes (two-stage: spec compliance + quality) |
 | `security-reviewer` | **Opus** | API routes, auth, inputs, supply chain |
-| `accessibility-reviewer` | Sonnet | Any UI component (WCAG 2.1 AA) |
-| `test-runner` | Sonnet | Before commits |
-| `researcher` | Sonnet | Investigation tasks |
+| `accessibility-reviewer` | Haiku | Any UI component (WCAG 2.1 AA) |
+| `test-runner` | Haiku | Before commits |
+| `researcher` | Haiku | Investigation tasks (web search, codebase exploration) |
 
 ## Hooks (Automated Enforcement)
 
-Three hooks enforce discipline without you having to remind Claude:
+Five hooks enforce discipline without you having to remind Claude:
 
 | Hook | Type | What it does |
 |------|------|-------------|
-| **SessionStart** | command | Loads primer.md, gotchas.md, patterns.md, decisions.md + shows git commits since last session |
-| **UserPromptSubmit** | command | Habits coach — nudges user toward /onboard, playbooks, /wrap-up (shown to user, not Claude) |
-| **Stop** | prompt | Verification gate — Haiku blocks Claude from claiming "Done" without showing test output |
+| **SessionStart** | command | Loads primer.md + recent git history. Skips `gotchas.md`/`patterns.md`/`decisions.md` when they're still template stubs (zero-cost on fresh installs). |
+| **UserPromptSubmit** | command | Habits coach — nudges user toward playbooks and `/wrap-up` (shown to user, not Claude) |
+| **Stop** | command | Verification gate (pure bash, sub-100ms). Inspects last turn; only blocks if code was edited without showing test/lint/typecheck output. Zero LLM cost on conversational/research/docs turns. |
 | **PreToolUse(Edit\|Write)** | command | Injects reminder to re-read the file before editing (via `additionalContext`) |
 | **PostToolUse(Bash)** | command (async) | Captures mistake signals: git reverts, test/lint/typecheck failures → `.claude/signals.jsonl` |
+
+### Model defaults
+
+- **Main session:** `opusplan` (Opus during planning, Sonnet during execution — the cost/quality sweet spot). Override in `.claude/settings.json` if you want plain Sonnet or Opus.
+- **Sub-agents:** `security-reviewer` on Opus; `code-reviewer` on Sonnet; `test-runner`, `researcher`, `accessibility-reviewer` on Haiku 4.5 with `effort: low`.
 
 ## Self-Improving System
 
@@ -261,7 +266,7 @@ Run `/retrospective` periodically (weekly or after a rough session). Run `/metri
 ```
 Session Start
   |
-Hook loads: primer.md, gotchas.md, patterns.md, decisions.md
+Hook loads: primer.md (+ gotchas/patterns/decisions if non-stub)
   + git commits since last session
   |
 Claude knows: project state, mistakes to avoid, code patterns,
@@ -317,7 +322,7 @@ claude plugin install socraticode@socraticode
 3. **Project intelligence** — `/learn` extracts real patterns, `decisions.md` preserves WHY.
 4. **Git-aware sessions** — Hook shows commits since last session on startup.
 5. **Task playbooks** — `/fix`, `/feature`, `/refactor`, `/research` — right behavior instantly.
-6. **Tiered onboarding** — Bare `/onboard` = status. With task = light. With `deep` = full.
+6. **Tiered onboarding** — On fresh installs, skip `/onboard` entirely. With a task = light mode. With `deep` = full context load once `gotchas`/`patterns`/`decisions` have real content.
 7. **Structured handoffs** — `/wrap-up` produces standard format with decisions and risks.
 8. **Self-improving** — Hooks auto-capture mistakes, `/retrospective` generates gotcha rules, `/metrics` tracks improvement.
 9. **Mistake memory** — `gotchas.md` grows automatically over time, auto-loaded every session.
@@ -332,7 +337,7 @@ claude plugin install socraticode@socraticode
 
 **Works with any language?** Yes. Language-agnostic. The installer supports Node, Python, Go, Rust out of the box. For others, run `/init` to auto-configure.
 
-**Slows down Claude?** No. Hook loads four small files. Agents launch only when needed. Stop hook adds ~2s per response.
+**Slows down Claude?** No. SessionStart hook only loads files that have real content (stubs are skipped). Stop hook is pure bash and runs in under 100ms. Sub-agents launch only when needed.
 
 **Existing project?** Yes. Installer never overwrites. Copies individual files.
 

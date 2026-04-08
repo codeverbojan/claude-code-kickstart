@@ -744,7 +744,7 @@ fi
 echo ""
 echo -e "  ${BOLD}Get started:${RESET}"
 echo "    1. Run 'claude' to start a session"
-echo "    2. Type /onboard to get oriented"
+echo "    2. Just describe what you want to build — skip /onboard on a fresh install"
 echo "    3. Use /fix, /feature, /refactor, /research for task playbooks"
 echo "    4. Type /wrap-up when done to save session state"
 echo ""
