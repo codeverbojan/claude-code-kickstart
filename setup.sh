@@ -505,6 +505,14 @@ if [ "$UPDATE_MODE" = true ]; then
     done
   done
 
+  # Update all hook scripts (overwrite with latest, preserve exec bit)
+  mkdir -p .claude/hooks
+  for hook in "$TMP_DIR"/.claude/hooks/*.sh; do
+    [ -f "$hook" ] || continue
+    copy_force "$hook" ".claude/hooks/$(basename "$hook")"
+    chmod +x ".claude/hooks/$(basename "$hook")" 2>/dev/null || true
+  done
+
 else
   echo -e "  Installing into: ${BOLD}$(pwd)${RESET}"
   echo ""
@@ -547,6 +555,15 @@ else
       [ -f "$skill_file" ] || continue
       copy_safe "$skill_file" ".claude/skills/$skill_name/$(basename "$skill_file")"
     done
+  done
+
+  # Hook scripts (individual, never overwrite, preserve exec bit)
+  # settings.json references these — if they're missing, every session errors.
+  mkdir -p .claude/hooks
+  for hook in "$TMP_DIR"/.claude/hooks/*.sh; do
+    [ -f "$hook" ] || continue
+    copy_safe "$hook" ".claude/hooks/$(basename "$hook")"
+    chmod +x ".claude/hooks/$(basename "$hook")" 2>/dev/null || true
   done
 fi
 
