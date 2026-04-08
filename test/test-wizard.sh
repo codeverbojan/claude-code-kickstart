@@ -428,6 +428,27 @@ if grep -q '<!-- Example:' "$TMP/CLAUDE.md" 2>/dev/null; then
 else
   fail "T-ADV-NO-SECTION" "--no-section did NOT preserve template stubs"
 fi
+# Python stack permissions must STILL have been applied — regression
+# guard for the real-world bug where --no-section accidentally skipped
+# the model override AND the stack-permissions block.
+if python3 -c "import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if 'Bash(pytest:*)' in d.get('permissions',{}).get('allow',[]) else 1)" "$TMP/.claude/settings.json" 2>/dev/null; then
+  pass "T-ADV-NO-SECTION: stack permissions still applied"
+else
+  fail "T-ADV-NO-SECTION" "stack permissions NOT applied — --no-section over-scoped"
+fi
+cleanup "$TMP"
+echo ""
+
+# T-ADV-NO-SECTION-MODEL: --no-section + --model must still write model to settings.json
+echo "${BOLD}T-ADV-NO-SECTION-MODEL: --no-section + --model writes model${N}"
+TMP=$(mktemp -d)
+cp -R "$FIXTURES_DIR/python-fastapi"/* "$TMP"/
+bash "$SETUP" "$REPO_ROOT" "$TMP" --skip-wizard --no-section --model=sonnet >"$TMP/.log" 2>&1 || true
+if python3 -c "import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if d.get('model')=='sonnet' else 1)" "$TMP/.claude/settings.json" 2>/dev/null; then
+  pass "T-ADV-NO-SECTION-MODEL: --model=sonnet still applied with --no-section"
+else
+  fail "T-ADV-NO-SECTION-MODEL" "model override was silently dropped when combined with --no-section"
+fi
 cleanup "$TMP"
 echo ""
 

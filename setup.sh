@@ -1144,9 +1144,11 @@ fi
 # fixtures with the unpopulated template stubs. Now an empty install still
 # gets a minimal version-stamped section (just the heading + Architecture
 # placeholder + response-style block).
-if [ "$SKIP_SECTION10" = true ]; then
-  echo -e "  ${DIM}[SKIP]${RESET} CLAUDE.md Project-Specific Configuration (advanced: --no-section)"
-elif [ "$UPDATE_MODE" != true ] || [ "$RECONFIGURE_MODE" = true ]; then
+if [ "$UPDATE_MODE" != true ] || [ "$RECONFIGURE_MODE" = true ]; then
+
+  if [ "$SKIP_SECTION10" = true ]; then
+    echo -e "  ${DIM}[SKIP]${RESET} CLAUDE.md Project-Specific Configuration (advanced: --no-section)"
+  else
 
   # If a starter config was chosen, use it directly
   if [ -n "${USE_STARTER_CONFIG:-}" ] && [ -f "$USE_STARTER_CONFIG" ]; then
@@ -1346,7 +1348,11 @@ ${STYLE_BLOCK}"
     fi
   fi
 
+  fi  # end of `if [ "$SKIP_SECTION10" = true ]; then ... else ...`
+
   # Advanced: main session model override — replaces the default "opusplan".
+  # Intentionally OUTSIDE the SKIP_SECTION10 gate: --no-section only skips
+  # CLAUDE.md edits, not settings.json configuration.
   if [ -n "$CUSTOM_MODEL" ] && [ -f ".claude/settings.json" ] && command -v python3 &>/dev/null; then
     CCK_MODEL="$CUSTOM_MODEL" python3 -c "
 import json, os
